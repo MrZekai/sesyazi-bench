@@ -1,0 +1,45 @@
+package com.aitolian.sesyazibench.engine
+
+import com.aitolian.sesyazibench.audio.DecodedAudio
+
+data class Segment(val startMs: Long, val endMs: Long, val text: String)
+
+data class EngineResult(
+    val engine: String,
+    val variant: String,
+    val language: String,
+    val detectedLanguage: String?,
+    val audioMs: Long,
+    val loadMs: Long,
+    val transcribeMs: Long,
+    val text: String,
+    val segments: List<Segment> = emptyList(),
+    val error: String? = null,
+) {
+    /** Gerçek zaman katsayısı: 0.25 => 60 sn ses 15 sn'de bitti. */
+    val rtf: Double get() = if (audioMs > 0) transcribeMs.toDouble() / audioMs else 0.0
+
+    /** Hedef: 60 sn ses ≤ 15 sn  =>  RTF ≤ 0.25 */
+    val passesTarget: Boolean get() = error == null && rtf <= 0.25
+}
+
+/** Uygulamanın desteklediği dil seçenekleri (whisper kodu -> ML Kit locale). */
+enum class Lang(val code: String, val label: String, val mlKitTag: String?) {
+    TR("tr", "Türkçe", "tr-TR"),
+    EN("en", "English", "en-US"),
+    DE("de", "Deutsch", "de-DE"),
+    FR("fr", "Français", "fr-FR"),
+    ES("es", "Español", "es-ES"),
+    IT("it", "Italiano", "it-IT"),
+    PT("pt", "Português", "pt-BR"),
+    RU("ru", "Русский", "ru-RU"),
+    AR("ar", "العربية", null),
+    HI("hi", "हिन्दी", "hi-IN"),
+    ID("id", "Bahasa Indonesia", null),
+    AUTO("auto", "Otomatik (yalnız Whisper)", null),
+}
+
+interface TranscriptionEngine {
+    val name: String
+    suspend fun transcribe(audio: DecodedAudio, lang: Lang): EngineResult
+}
