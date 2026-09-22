@@ -1,4 +1,4 @@
-# SesYazı Bench
+# SesYazı (V1 prototip)
 
 "Ses → Yazı" uygulaması için **10 günlük fizibilite prototipi**. Amaç tek bir soruyu cevaplamak:
 

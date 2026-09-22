@@ -49,7 +49,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
-    packaging { jniLibs { useLegacyPackaging = false } }
+    // ggml CPU varyantları dlopen ile yüklenir → .so dosyaları diske çıkarılmalı
+    packaging { jniLibs { useLegacyPackaging = true } }
 }
 
 kotlin {
@@ -67,6 +68,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    // AdMob + UMP rıza formu (şimdilik yalnızca test reklam ID'leri)
+    implementation("com.google.android.gms:play-services-ads:24.4.0")
+    implementation("com.google.android.ump:user-messaging-platform:3.2.0")
 
     // ML Kit GenAI Speech Recognition (alpha) — cihaz içi
     implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha1")

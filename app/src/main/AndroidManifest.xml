@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Yalnızca whisper modelini indirmek için -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Yalnızca Ayarlar > Test araçları > ML Kit için (Android tanıyıcısı istiyor) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:allowBackup="false"
@@ -11,6 +13,11 @@
         android:label="@string/app_name"
         android:largeHeap="true"
         android:theme="@style/Theme.SesYaziBench">
+
+        <!-- AdMob TEST uygulama kimliği (Google örnek ID). Yayın öncesi değişecek. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
 
         <activity
             android:name=".MainActivity"
