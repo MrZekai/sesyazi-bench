@@ -14,8 +14,11 @@ data class Transcript(
     val language: String,
     val processMs: Long,
     val segments: List<Segment>,
+    /** Kullanıcının not ekranında düzelttiği metin (varsa ham dökümün yerine gösterilir). */
+    val editedText: String? = null,
 ) {
-    val text: String get() = segments.joinToString(" ") { it.text }
+    val rawText: String get() = segments.joinToString(" ") { it.text }
+    val text: String get() = editedText ?: rawText
     val preview: String get() = text.take(40).let { if (text.length > 40) "$it…" else it }
 
     fun toSrt(): String = buildString {
@@ -26,7 +29,7 @@ data class Transcript(
         }
     }
 
-    fun toTxt(): String = segments.joinToString("\n") { "[${clock(it.startMs)}] ${it.text}" }
+    fun toTxt(): String = editedText ?: segments.joinToString("\n") { "[${clock(it.startMs)}] ${it.text}" }
 
     companion object {
         fun clock(ms: Long): String = "%d:%02d".format(Locale.US, ms / 60_000, (ms / 1000) % 60)
@@ -56,6 +59,7 @@ object HistoryStore {
                     val s = segs.getJSONObject(j)
                     Segment(s.getLong("s"), s.getLong("e"), s.getString("t"))
                 },
+                editedText = o.optString("edited").ifEmpty { null },
             )
         }
     }.getOrDefault(emptyList())
@@ -78,7 +82,8 @@ object HistoryStore {
             tr.segments.forEach { s -> segs.put(JSONObject().put("s", s.startMs).put("e", s.endMs).put("t", s.text)) }
             arr.put(
                 JSONObject().put("id", tr.id).put("fileName", tr.fileName).put("durationMs", tr.durationMs)
-                    .put("language", tr.language).put("processMs", tr.processMs).put("segments", segs),
+                    .put("language", tr.language).put("processMs", tr.processMs).put("segments", segs)
+                    .apply { tr.editedText?.let { put("edited", it) } },
             )
         }
         // Atomik yazım: yarıda kesilen yazma geçmişi bozmasın

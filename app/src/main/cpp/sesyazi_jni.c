@@ -140,6 +140,22 @@ static const char *detect_allowed_language(struct whisper_context *ctx, const fl
 }
 
 /*
+ * Yalnızca dil algılama. Hız için küçük (base) modelle çağrılır: böylece büyük
+ * model sadece bir kez (döküm için) çalışır, dil algılama için ikinci kez değil.
+ */
+JNIEXPORT jstring JNICALL
+JNI_FN(nativeDetectLanguage)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pcm, jint threads) {
+    (void) thiz;
+    struct whisper_context *ctx = (struct whisper_context *) (intptr_t) ctxPtr;
+    if (!ctx) return (*env)->NewStringUTF(env, "auto");
+    jsize n = (*env)->GetArrayLength(env, pcm);
+    jfloat *samples = (*env)->GetFloatArrayElements(env, pcm, NULL);
+    const char *lang = detect_allowed_language(ctx, samples, n, threads);
+    (*env)->ReleaseFloatArrayElements(env, pcm, samples, JNI_ABORT);
+    return (*env)->NewStringUTF(env, lang);
+}
+
+/*
  * UTF-8 bayt dizisi döner (NewStringUTF, bölünmüş çok baytlı Türkçe
  * karakterlerde çöker; bu yüzden çözme Kotlin'de yapılır).
  * Çıktı biçimi (satır satır):

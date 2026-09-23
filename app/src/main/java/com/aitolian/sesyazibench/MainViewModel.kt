@@ -130,6 +130,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(quality = q, lang = l, translationTarget = target ?: it.translationTarget, readerFont = prefs.readerFont)
         }
         viewModelScope.launch(Dispatchers.IO) {
+            ModelStore.cleanupLegacy(ctx)
             val h = HistoryStore.load(ctx)
             _state.update { it.copy(history = h) }
         }
@@ -245,7 +246,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             },
             cancel = cancel,
-            onSegment = { seg -> if (stream) _state.update { it.copy(live = it.live + seg) } },
+            onSegment = { seg -> if (stream && !cancel.get()) _state.update { it.copy(live = it.live + seg) } },
         )
         if (r.error == null) SpeedStore.record(ctx, model, r.transcribeMs, a.durationMs)
         // Test günlüğü (metin içerir) yalnızca geliştirici modunda tutulur
@@ -320,6 +321,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
 
+        prefetchDetector(s.lang)
         if (!best) {
             Notifier.notifyDone(ctx, t.text.take(120))
             return
@@ -352,6 +354,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             else it.copy(history = h, refining = null)
         }
         Notifier.notifyDone(ctx, t.text.take(120))
+    }
+
+    /**
+     * Otomatik dil seçiliyse küçük base modelini (78 MB) Wi‑Fi'deyken arka planda
+     * indirir: sonraki dökümlerde dil onunla bulunur, büyük model bir kez çalışır.
+     */
+    private fun prefetchDetector(lang: Lang) {
+        if (lang != Lang.AUTO || ModelStore.isReady(ctx, WhisperModel.BASE)) return
+        val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java)
+        if (cm?.isActiveNetworkMetered != false) return
+        viewModelScope.launch { runCatching { ModelStore.download(ctx, WhisperModel.BASE) {} } }
+    }
+
+    /** Not ekranında düzenlenen metni kaydeder (boşsa ham döküme döner). */
+    fun saveEdit(text: String) {
+        val r = state.value.result ?: return
+        val norm = { x: String -> x.replace(Regex("\\s+"), " ").trim() }
+        val edited = text.trim().takeIf { it.isNotEmpty() && norm(it) != norm(r.rawText) }
+        val t = r.copy(editedText = edited)
+        viewModelScope.launch {
+            val h = withContext(Dispatchers.IO) { HistoryStore.add(ctx, t) }
+            _state.update { if (it.result?.id == t.id) it.copy(result = t, history = h, translation = null, toast = "Kaydedildi") else it }
+        }
+    }
+
+    /** Not ekranından çıkış: sürüyorsa işi iptal edip başlangıca döner. */
+    fun goHome() {
+        if (work?.isActive == true && state.value.refining == null) cancel.set(true)
+        clearForNew()
+    }
+
+    fun deleteCurrent() {
+        val r = state.value.result ?: return
+        clearForNew()
+        deleteHistory(r)
     }
 
     /** Türkçe öneri kartındaki "En iyi ile tekrar". */
@@ -453,7 +490,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val r = state.value.result ?: return
         val source = langOf(r.language) ?: run { toast("Kaynak dil tanınmadı"); return }
         if (source == target) {
-            _state.update { it.copy(translationTarget = target, translation = r.segments, translating = null) }
+            _state.update { it.copy(translationTarget = target, translation = r.editedText?.let { e -> listOf(Segment(0, r.durationMs, e)) } ?: r.segments, translating = null) }
             return
         }
         if (!OnDeviceTranslator.supports(source)) { toast("${source.label} için çeviri desteklenmiyor"); return }
@@ -461,7 +498,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(translationTarget = target, translation = null, translating = "Hazırlanıyor…") }
         translateJob = viewModelScope.launch {
             try {
-                val out = OnDeviceTranslator.translate(r.segments, source, target) { msg ->
+                // Kullanıcı metni düzelttiyse düzeltilmiş metin çevrilir
+                val input = r.editedText?.let { listOf(Segment(0, r.durationMs, it)) } ?: r.segments
+                val out = OnDeviceTranslator.translate(input, source, target) { msg ->
                     _state.update { it.copy(translating = msg) }
                 }
                 _state.update { if (it.result?.id == r.id) it.copy(translation = out, translating = null) else it }

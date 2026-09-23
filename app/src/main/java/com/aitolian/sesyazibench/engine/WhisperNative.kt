@@ -16,6 +16,8 @@ object WhisperNative {
     external fun nativeInit(modelPath: String): Long
     external fun nativeFree(ctx: Long)
     external fun nativeSystemInfo(): String
+    /** Desteklenen diller arasından dil kodu ("tr", "de"…) ya da "auto". */
+    external fun nativeDetectLanguage(ctx: Long, pcm: FloatArray, threads: Int): String
     external fun nativeTranscribe(
         ctx: Long, pcm: FloatArray, lang: String, threads: Int, beamSize: Int, vadModelPath: String?,
         listener: ProgressListener?,

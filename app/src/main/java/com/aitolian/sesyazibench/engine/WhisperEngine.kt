@@ -52,8 +52,14 @@ class WhisperEngine(
                 }
             }
             val t1 = SystemClock.elapsedRealtime()
+            // Otomatik dil: büyük modeli iki kez çalıştırmamak için dili küçük (base) modelle bul
+            var langCode = lang.code
+            if (lang == Lang.AUTO && model != WhisperModel.BASE && ModelStore.isReady(context, WhisperModel.BASE)) {
+                val d = detectorCtx(context)
+                if (d != 0L) langCode = WhisperNative.nativeDetectLanguage(d, audio.samples, threadCount())
+            }
             val raw = WhisperNative.nativeTranscribe(
-                ctx, audio.samples, lang.code, threadCount(), beamSize,
+                ctx, audio.samples, langCode, threadCount(), beamSize,
                 ModelStore.vadFile(context).takeIf { ModelStore.vadReady(context) }?.absolutePath,
                 listener,
             ).toString(Charsets.UTF_8)
@@ -65,7 +71,7 @@ class WhisperEngine(
             val segs = mutableListOf<Segment>()
             raw.lineSequence().filter { it.isNotBlank() }.forEach { line ->
                 val p = line.split('\t', limit = 3)
-                if (p[0] == "LANG") detected = p.getOrNull(1)
+                if (p[0] == "LANG") detected = p.getOrNull(1)?.takeIf { it != "?" } ?: langCode.takeIf { it != "auto" }
                 else if (p.size == 3 && p[2].isNotBlank() && !isHallucination(p[2])) {
                     segs += Segment(p[0].toLong(), p[1].toLong(), p[2].trim())
                 }
@@ -103,9 +109,19 @@ class WhisperEngine(
                 if (cachedCtx != 0L) WhisperNative.nativeFree(cachedCtx)
                 cachedCtx = 0L
                 cachedModel = null
+                if (detectCtx != 0L) WhisperNative.nativeFree(detectCtx)
+                detectCtx = 0L
             } finally {
                 lock.unlock()
             }
+        }
+
+        /** Dil algılama için ayrı, küçük base bağlamı (~100 MB); ana modelle birlikte bellekte kalır. */
+        private var detectCtx: Long = 0L
+        private fun detectorCtx(context: Context): Long {
+            if (cachedModel == WhisperModel.BASE && cachedCtx != 0L) return cachedCtx
+            if (detectCtx == 0L) detectCtx = WhisperNative.nativeInit(ModelStore.file(context, WhisperModel.BASE).absolutePath)
+            return detectCtx
         }
 
         private fun contextFor(context: Context, model: WhisperModel): Long {

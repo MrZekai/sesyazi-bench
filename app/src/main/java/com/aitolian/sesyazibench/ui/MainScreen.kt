@@ -99,7 +99,6 @@ fun MainScreen(
     val adsReady by Ads.ready.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showSettings by remember { mutableStateOf(false) }
-    var reading by rememberSaveable { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(vm::onAudio)
     }
@@ -125,11 +124,12 @@ fun MainScreen(
         SettingsScreen(vm, s, onBack = { showSettings = false })
         return
     }
-    if (reading && s.result != null) {
-        ReaderScreen(s, vm, onClose = { reading = false })
+    // Döküm metni gelmeye başlayınca (ya da bir not açılınca) tam ekran not defteri
+    if (s.result != null || s.live.isNotEmpty()) {
+        NoteScreen(s, vm, adsReady, onHome = vm::goHome)
         return
     }
-    val canGoHome = !busy && (s.result != null || s.phase is Phase.Failed)
+    val canGoHome = !busy && s.phase is Phase.Failed
     val goHome = { vm.clearForNew() }
     // Geri tuşu: sonuç/hata ekranından uygulamayı kapatmak yerine başlangıca dön
     BackHandler(enabled = canGoHome) { goHome() }
@@ -143,11 +143,9 @@ fun MainScreen(
             )
             Controls(s, busy, vm)
             Spacer(Modifier.height(14.dp))
-            ResultSheet(
+            HomeSheet(
                 s, vm, Modifier.weight(1f),
-                onNew = { if (!busy) onNewAudio { vm.clearForNew() } },
-                picker = { ShareGuide(onOpenWhatsApp = openWhatsApp, onOtherFile = pickOtherFile) },
-                onRead = { reading = true },
+                guide = { ShareGuide(onOpenWhatsApp = openWhatsApp, onOtherFile = pickOtherFile) },
             )
         }
         // Altta sabit banner — içerikle asla çakışmaz
@@ -302,15 +300,12 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
 }
 
 @Composable
-private fun ResultSheet(
+private fun HomeSheet(
     s: MainState,
     vm: MainViewModel,
     modifier: Modifier,
-    onNew: () -> Unit,
-    picker: @Composable () -> Unit,
-    onRead: () -> Unit,
+    guide: @Composable () -> Unit,
 ) {
-    val context = LocalContext.current
     val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     Column(
         modifier.fillMaxWidth()
@@ -325,148 +320,16 @@ private fun ResultSheet(
                 .background(SY.Muted.copy(alpha = .4f)),
         )
         Spacer(Modifier.height(12.dp))
-        val r = s.result
-        if (r == null && s.live.isNotEmpty()) {
-            LivePane(s)
-        } else if (r == null) {
-            picker()
-        } else {
-            PlayerRow(s, vm)
-            s.refining?.let { RefineBanner(it) }
-            Spacer(Modifier.height(12.dp))
-            Tabs(s.tab) { t -> if (t == Tab.TRANSLATION) vm.openTranslation() else vm.setTab(t) }
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Tüm metni tam ekranda baştan aşağı okumak için
-                Text(
-                    "⛶ Tam ekran oku", color = SY.OnAccent, fontSize = 12.5.sp, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clip(CircleShape).background(SY.Accent).clickable(onClick = onRead)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    if (s.paragraphView) "☰ Satır görünümü" else "¶ Paragraf görünümü",
-                    color = SY.Accent, fontSize = 12.5.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = vm::toggleParagraph).padding(6.dp),
-                )
-            }
-            when (s.tab) {
-                Tab.TEXT -> Segments(r.segments, s, vm, highlight = true)
-                Tab.TRANSLATION -> TranslationPane(s, vm)
-            }
-            // Kopyala / Paylaş / SRT, açık olan sekmenin metnini kullanır
-            val shown = if (s.tab == Tab.TRANSLATION) s.translation else r.segments
-            val suffix = if (s.tab == Tab.TRANSLATION) "_${s.translationTarget.code}" else ""
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Action("⧉", "Kopyala", Modifier.weight(1f)) {
-                    if (shown == null) vm.toast("Çeviri henüz hazır değil")
-                    else { copyText(context, shown.joinToString(" ") { it.text }); vm.toast("Kopyalandı") }
-                }
-                Action("↗", "Paylaş", Modifier.weight(1f)) {
-                    if (shown == null) vm.toast("Çeviri henüz hazır değil") else shareText(context, shown.joinToString(" ") { it.text })
-                }
-                Action("文A", "Çevir", Modifier.weight(1f)) { vm.openTranslation() }
-                Action("⤓", "SRT / TXT", Modifier.weight(1f)) {
-                    if (shown == null) vm.toast("Çeviri henüz hazır değil") else shareSrt(context, r, shown, suffix)
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "✓ ${"%.1f".format(Locale("tr"), r.processMs / 1000.0)} sn · cihazda işlendi · ${langName(r.language)}",
-                    fontSize = 12.sp, color = SY.Muted, modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "+ Yeni ses", fontSize = 13.sp, color = SY.Accent, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onNew).padding(6.dp),
-                )
-            }
-            if (s.suggestBest && s.hasAudio) SuggestBestCard(onRun = vm::rerunWithBest)
-        }
         UndoBar(s, vm)
+        // Notlar önce (dönen kullanıcı için), kılavuz altta
         History(s, vm)
+        guide()
         Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
-private fun LivePane(s: MainState) {
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(SY.A2))
-            Text("Canlı · metin geldikçe yazılıyor", fontSize = 12.sp, color = SY.Muted, modifier = Modifier.padding(start = 8.dp))
-        }
-        s.live.forEach { seg ->
-            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp)) {
-                Text(
-                    Transcript.clock(seg.startMs), fontSize = 12.sp, color = SY.Accent, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.width(44.dp).padding(top = 3.dp),
-                )
-                Text(seg.text, fontSize = 16.sp, lineHeight = 22.sp, color = SY.Text, modifier = Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun RefineBanner(text: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(12.dp))
-            .background(Brush.horizontalGradient(listOf(SY.A1.copy(alpha = .25f), SY.A2.copy(alpha = .18f))))
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CircularProgressIndicator(Modifier.size(16.dp), color = SY.Accent, strokeWidth = 2.dp)
-        Text(text, fontSize = 12.5.sp, color = SY.Text, modifier = Modifier.padding(start = 10.dp))
-    }
-}
-
-@Composable
-private fun SuggestBestCard(onRun: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(14.dp))
-            .border(1.dp, SY.Accent.copy(alpha = .35f), RoundedCornerShape(14.dp))
-            .background(SY.Card).padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text("Türkçe için daha doğru sonuç", fontSize = 13.5.sp, color = SY.Text, fontWeight = FontWeight.Medium)
-            Text("\"En iyi\" mod önce hızlı metni gösterir, sonra arka planda iyileştirir.", fontSize = 12.sp, color = SY.Muted)
-        }
-        Pill("En iyi ile dene", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(start = 8.dp), onClick = onRun)
-    }
-}
-
-@Composable
-private fun PlayerRow(s: MainState, vm: MainViewModel) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SY.Card)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(34.dp).clip(CircleShape).background(if (s.hasAudio) SY.Accent else SY.Chip)
-                .clickable(enabled = s.hasAudio, onClick = vm::togglePlay),
-            contentAlignment = Alignment.Center,
-        ) { Text(if (s.playing) "❚❚" else "▶", color = if (s.hasAudio) SY.OnAccent else SY.Muted, fontSize = 12.sp) }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Row {
-                Text(
-                    s.fileName ?: "", fontSize = 13.sp, color = SY.Text, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                )
-                Text("${Transcript.clock(s.positionMs)} / ${Transcript.clock(s.audioMs)}", fontSize = 12.sp, color = SY.Muted)
-            }
-            Waveform(
-                s.waveform, if (s.audioMs > 0) s.positionMs.toFloat() / s.audioMs else 0f,
-                Modifier.fillMaxWidth().height(24.dp).padding(top = 3.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun Waveform(peaks: FloatArray, progress: Float, modifier: Modifier) {
+internal fun Waveform(peaks: FloatArray, progress: Float, modifier: Modifier) {
     Canvas(modifier) {
         val n = if (peaks.isEmpty()) 46 else peaks.size
         val step = size.width / n
@@ -477,127 +340,6 @@ private fun Waveform(peaks: FloatArray, progress: Float, modifier: Modifier) {
             val color = if (progress > 0f && i.toFloat() / n <= progress) SY.Accent else Color(0x30FFFFFF)
             drawRoundRect(color, Offset(i * step, (size.height - h) / 2), Size(bw, h), CornerRadius(bw / 2))
         }
-    }
-}
-
-@Composable
-private fun Tabs(tab: Tab, onTab: (Tab) -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(CircleShape).background(SY.Card).padding(3.dp)) {
-        listOf(Tab.TEXT to "Metin", Tab.TRANSLATION to "Çeviri").forEach { (t, label) ->
-            val sel = t == tab
-            Box(
-                Modifier.weight(1f).clip(CircleShape).background(if (sel) SY.Accent else Color.Transparent)
-                    .clickable { onTab(t) }.padding(vertical = 7.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label, fontSize = 13.5.sp, color = if (sel) SY.OnAccent else SY.Muted,
-                    fontWeight = if (sel) FontWeight.Medium else FontWeight.Normal,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun Segments(segments: List<Segment>, s: MainState, vm: MainViewModel, highlight: Boolean) {
-    if (s.paragraphView) {
-        // Paragraf görünümü: zaman damgası yok, tamamen seçilebilir/kopyalanabilir düz metin
-        SelectionContainer {
-            Text(
-                segments.joinToString(" ") { it.text }, fontSize = 16.5.sp, lineHeight = 25.sp, color = SY.Text,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-            )
-        }
-        return
-    }
-    // Satır görünümü: dokun → sese atla; basılı tut → metni seç/kopyala
-    SelectionContainer { Column {
-        segments.forEach { seg ->
-            val current = highlight && s.playing && s.positionMs >= seg.startMs && s.positionMs < seg.endMs
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .background(if (current) SY.Card else Color.Transparent)
-                    .clickable(enabled = s.hasAudio) { vm.seekTo(seg.startMs) }
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-            ) {
-                if (current) Box(Modifier.width(3.dp).height(20.dp).background(SY.Accent))
-                Text(
-                    Transcript.clock(seg.startMs), fontSize = 12.sp, color = SY.Accent, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.width(44.dp).padding(start = if (current) 6.dp else 0.dp, top = 3.dp),
-                )
-                Text(seg.text, fontSize = 16.sp, lineHeight = 22.sp, color = SY.Text, modifier = Modifier.weight(1f))
-            }
-        }
-    } }
-}
-
-@Composable
-private fun TranslationPane(s: MainState, vm: MainViewModel) {
-    var open by remember { mutableStateOf(false) }
-    val source = s.result?.language
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
-            Text(
-                "${langOf(source)?.label ?: source} →", fontSize = 13.sp, color = SY.Muted,
-                modifier = Modifier.padding(end = 8.dp),
-            )
-            Box {
-                Pill("${s.translationTarget.label} ▾", bg = SY.Chip, fg = SY.Text, onClick = { if (s.translating == null) open = true })
-                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                    TRANSLATABLE.filter { it.code != source }.forEach { l ->
-                        DropdownMenuItem(text = { Text(l.label) }, onClick = { open = false; vm.translate(l) })
-                    }
-                }
-            }
-        }
-        val status = s.translating
-        val tr = s.translation
-        when {
-            status != null -> Row(
-                Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(Modifier.size(18.dp), color = SY.Accent, strokeWidth = 2.dp)
-                Text(status, color = SY.Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 10.dp))
-            }
-            tr != null -> Segments(tr, s, vm, highlight = false)
-            else -> Pill(
-                "Çevir", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(10.dp),
-                onClick = { vm.translate(s.translationTarget) },
-            )
-        }
-        // Cihaz içi çeviri sınırlı; daha iyi sonuç için Google Çeviri (ücretsiz, internetle)
-        val ctx = LocalContext.current
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).clip(RoundedCornerShape(12.dp))
-                .background(SY.Card).clickable {
-                    val r = s.result ?: return@clickable
-                    openGoogleTranslate(ctx, r.text, r.language, s.translationTarget.code)
-                }.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Daha doğal çeviri: Google Çeviri'de aç", color = SY.Text, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                Text("Ücretsiz · internet gerekir · metin Google'a gider", color = SY.Muted, fontSize = 11.5.sp)
-            }
-            Text("↗", color = SY.Accent, fontSize = 17.sp)
-        }
-        Text(
-            "Bu sekmedeki çeviri cihazda yapılır; her dil paketi yalnızca ilk seferde indirilir.",
-            fontSize = 11.5.sp, color = SY.Muted, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
-    }
-}
-
-@Composable
-private fun Action(icon: String, label: String, modifier: Modifier, onClick: () -> Unit) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(14.dp)).background(SY.Card)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) { Text(icon, color = SY.Accent, fontSize = 17.sp) }
-        Text(label, color = SY.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
     }
 }
 
@@ -619,25 +361,42 @@ private fun UndoBar(s: MainState, vm: MainViewModel) {
     }
 }
 
+
+/** Son notlar: not defteri kartları. Dokun → aç, basılı tut → sil (geri alınabilir). */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun History(s: MainState, vm: MainViewModel) {
-    val items = s.history.filter { it.id != s.result?.id }.take(8)
+    val items = s.history.take(6)
     if (items.isEmpty()) return
-    Row(
-        Modifier.fillMaxWidth().padding(top = 14.dp).horizontalScroll(rememberScrollState()),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Son:", fontSize = 12.sp, color = SY.Muted)
+    Text(
+        "NOTLARIM", color = SY.Accent, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.forEach { t ->
-            Box(
-                Modifier.padding(start = 8.dp).clip(CircleShape).background(SY.Card)
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SY.Card)
                     .combinedClickable(onClick = { vm.openHistory(t) }, onLongClick = { vm.deleteHistory(t) })
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            ) { Text(t.preview, color = SY.Text, fontSize = 13.sp, maxLines = 1) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        titleOf(t), color = SY.Text, fontSize = 14.5.sp, fontWeight = FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                    )
+                    Text(noteDate(t), color = SY.Muted, fontSize = 11.5.sp, modifier = Modifier.padding(start = 8.dp))
+                }
+                Text(
+                    t.text, color = SY.Muted, fontSize = 12.5.sp, lineHeight = 17.sp, maxLines = 2,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
-        Text("  (silmek için basılı tut)", fontSize = 11.sp, color = SY.Muted)
     }
+    Text(
+        "Silmek için nota basılı tut", fontSize = 11.sp, color = SY.Muted,
+        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 16.dp),
+    )
 }
 
 @Composable
@@ -672,7 +431,7 @@ internal fun shareText(context: Context, text: String) {
     context.startActivity(Intent.createChooser(i, "Paylaş"))
 }
 
-private fun shareSrt(context: Context, t: Transcript, segments: List<Segment>, suffix: String) {
+internal fun shareSrt(context: Context, t: Transcript, segments: List<Segment>, suffix: String) {
     val dir = File(context.filesDir, "results").apply { mkdirs() }
     // Dosya adını güvenli karakterlere indir (/, :, * vb. FileProvider'ı çökertiyordu)
     val safe = t.fileName.substringBeforeLast('.').replace(Regex("[^\\p{L}\\p{N}._ -]"), "_").trim().take(60)

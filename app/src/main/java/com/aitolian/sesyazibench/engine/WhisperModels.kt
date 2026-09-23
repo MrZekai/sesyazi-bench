@@ -7,11 +7,17 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Kuantize whisper.cpp modelleri (Hugging Face, MIT lisanslı Whisper ağırlıkları). */
+/**
+ * Kuantize whisper.cpp modelleri (Hugging Face, MIT lisanslı Whisper ağırlıkları).
+ *
+ * base/small için q8_0: ggml ARM'da q8_0 ağırlıklarını açılışta dotprod/i8mm
+ * çekirdeklerine uygun düzene yeniden paketliyor (repack); q5_1 bu hızlı yoldan
+ * yararlanamıyor. Dosya biraz daha büyük ama döküm belirgin daha hızlı.
+ */
 enum class WhisperModel(val fileName: String, val label: String, val approxMb: Int) {
     TINY("ggml-tiny-q5_1.bin", "tiny q5_1", 31),
-    BASE("ggml-base-q5_1.bin", "base q5_1", 57),
-    SMALL("ggml-small-q5_1.bin", "small q5_1", 181),
+    BASE("ggml-base-q8_0.bin", "base q8_0", 78),
+    SMALL("ggml-small-q8_0.bin", "small q8_0", 252),
     TURBO("ggml-large-v3-turbo-q5_0.bin", "large-v3-turbo q5_0", 547);
 
     val url: String get() = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$fileName"
@@ -36,6 +42,13 @@ object ModelStore {
         if (!vadReady(context)) runCatching { fetch(VadModel.URL, vadFile(context), 900_000L) {} }
         if (!isReady(context, m)) fetch(m.url, file(context, m), m.approxMb * 1_048_576L, onProgress)
         onProgress(1f)
+    }
+
+    /** Eski (q5_1) model dosyalarını siler — yerlerini hızlı q8_0 sürümleri aldı. */
+    fun cleanupLegacy(context: Context) {
+        listOf("ggml-base-q5_1.bin", "ggml-small-q5_1.bin").forEach { File(dir(context), it).delete() }
+        dir(context).listFiles()?.filter { it.name.endsWith(".part") && it.lastModified() < System.currentTimeMillis() - 86_400_000 }
+            ?.forEach { it.delete() }
     }
 
     /** VAD yoksa sessizce indirmeyi dener (whisper modeli zaten varsa). */
