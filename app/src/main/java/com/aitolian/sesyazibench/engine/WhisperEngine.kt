@@ -93,6 +93,21 @@ class WhisperEngine(
             }
         }
 
+        /**
+         * Uygulama arka plana geçince modeli bellekten boşalt (~200-600 MB).
+         * Döküm sürüyorsa kilidi alamaz ve bir şey yapmaz.
+         */
+        fun releaseIfIdle() {
+            if (!lock.tryLock()) return
+            try {
+                if (cachedCtx != 0L) WhisperNative.nativeFree(cachedCtx)
+                cachedCtx = 0L
+                cachedModel = null
+            } finally {
+                lock.unlock()
+            }
+        }
+
         private fun contextFor(context: Context, model: WhisperModel): Long {
             if (cachedModel == model && cachedCtx != 0L) return cachedCtx
             if (cachedCtx != 0L) WhisperNative.nativeFree(cachedCtx)

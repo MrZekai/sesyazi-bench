@@ -28,7 +28,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -68,6 +72,14 @@ import kotlinx.coroutines.launch
 private const val PRIVACY_URL = "https://mrzekai.github.io/privacy-policy.html"
 private const val SUPPORT_EMAIL = "aitolianrock@gmail.com"
 
+private const val LICENSES =
+    "• whisper.cpp / ggml — MIT Lisansı, © Georgi Gerganov ve katkıda bulunanlar\n" +
+    "• OpenAI Whisper model ağırlıkları — MIT Lisansı, © OpenAI\n" +
+    "• Silero VAD — MIT Lisansı, © Silero Team\n" +
+    "• Google ML Kit (Çeviri, Konuşma) — Google APIs Hizmet Şartları\n" +
+    "• Google Mobile Ads SDK, User Messaging Platform — Google Hizmet Şartları\n" +
+    "• AndroidX, Jetpack Compose, Kotlin — Apache Lisansı 2.0"
+
 private fun Quality.description() = when (this) {
     Quality.FAST -> "En hızlı. Kısa ve net mesajlar için; doğruluk daha düşük."
     Quality.BALANCED -> "Çoğu mesaj için önerilen. Orta seviye telefonlarda biraz bekletebilir."
@@ -85,6 +97,8 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
     var versionTaps by remember { mutableIntStateOf(0) }
     var devMode by remember { mutableStateOf(vm.prefs.devMode) }
     var notify by remember { mutableStateOf(vm.prefs.notifyWhenDone) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var showLicenses by remember { mutableStateOf(false) }
 
     LaunchedEffect(refresh) { packs = runCatching { OnDeviceTranslator.downloadedLanguages() }.getOrDefault(emptyList()) }
 
@@ -183,6 +197,7 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                     color = SY.Muted, fontSize = 12.5.sp,
                 )
                 LinkRow("Gizlilik politikası") { openUrl(context, PRIVACY_URL) }
+                LinkRow("Döküm geçmişini temizle (${s.history.size})") { confirmClear = true }
                 if (activity != null && Ads.privacyOptionsRequired(activity)) {
                     LinkRow("Reklam tercihleri") { Ads.showPrivacyOptions(activity) }
                 }
@@ -199,6 +214,7 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                         .putExtra(Intent.EXTRA_SUBJECT, context.getString(com.aitolian.sesyazibench.R.string.app_name) + " geri bildirim (${appVersion(context)})")
                     runCatching { context.startActivity(i) }
                 }
+                LinkRow("Açık kaynak lisansları") { showLicenses = true }
                 LinkRow("Uygulamayı puanla") {
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}"))) }
                         .onFailure { openUrl(context, "https://play.google.com/store/apps/details?id=${context.packageName}") }
@@ -206,6 +222,25 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
             }
 
             if (devMode) DevTools(vm, s)
+            if (confirmClear) {
+                AlertDialog(
+                    onDismissRequest = { confirmClear = false },
+                    containerColor = SY.Sheet, titleContentColor = SY.Text, textContentColor = SY.Muted,
+                    title = { Text("Geçmiş silinsin mi?") },
+                    text = { Text("Telefondaki tüm döküm metinleri silinir. Bu işlem geri alınamaz.") },
+                    confirmButton = { TextButton(onClick = { vm.clearHistory(); confirmClear = false }) { Text("Sil", color = SY.Error) } },
+                    dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Vazgeç", color = SY.Accent) } },
+                )
+            }
+            if (showLicenses) {
+                AlertDialog(
+                    onDismissRequest = { showLicenses = false },
+                    containerColor = SY.Sheet, titleContentColor = SY.Text, textContentColor = SY.Muted,
+                    title = { Text("Açık kaynak lisansları") },
+                    text = { Text(LICENSES, fontSize = 12.5.sp) },
+                    confirmButton = { TextButton(onClick = { showLicenses = false }) { Text("Kapat", color = SY.Accent) } },
+                )
+            }
             Spacer(Modifier.height(24.dp))
         }
     }

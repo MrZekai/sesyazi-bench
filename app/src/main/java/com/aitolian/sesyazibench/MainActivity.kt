@@ -12,6 +12,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ui.MainScreen
 import com.aitolian.sesyazibench.ui.SesYaziTheme
@@ -33,8 +35,8 @@ class MainActivity : ComponentActivity() {
             SesYaziTheme {
                 MainScreen(
                     vm,
-                    onNewAudio = { then -> Ads.maybeShowInterstitial(this, then) },
-                    onProcessingAd = { Ads.maybeShowInterstitial(this) {} },
+                    onNewAudio = { then -> then() }, // reklam artık döküm başında
+                    onProcessingAd = { lifecycleScope.launch { Ads.showWhenReady(this@MainActivity) } },
                 )
             }
         }
@@ -43,6 +45,14 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Notifier.appVisible = true
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Arka planda büyük modeli tutmak sistemin uygulamayı öldürmesine yol açar
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+            com.aitolian.sesyazibench.engine.WhisperEngine.releaseIfIdle()
+        }
     }
 
     override fun onStop() {

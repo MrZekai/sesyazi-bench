@@ -60,8 +60,14 @@ object HistoryStore {
         }
     }.getOrDefault(emptyList())
 
-    fun add(c: Context, t: Transcript): List<Transcript> {
-        val list = (listOf(t) + load(c).filter { it.id != t.id }).take(MAX)
+    fun remove(c: Context, id: Long): List<Transcript> = save(c, load(c).filter { it.id != id })
+
+    fun clear(c: Context) { file(c).delete() }
+
+    fun add(c: Context, t: Transcript): List<Transcript> =
+        save(c, (listOf(t) + load(c).filter { it.id != t.id }).take(MAX))
+
+    private fun save(c: Context, list: List<Transcript>): List<Transcript> {
         val arr = JSONArray()
         list.forEach { tr ->
             val segs = JSONArray()

@@ -72,6 +72,10 @@ import com.aitolian.sesyazibench.data.Transcript
 import com.aitolian.sesyazibench.R
 import com.aitolian.sesyazibench.ShareIntegration
 import androidx.compose.ui.res.stringResource
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.Segment
 import com.aitolian.sesyazibench.engine.TRANSLATABLE
@@ -120,6 +124,8 @@ fun MainScreen(
         SettingsScreen(vm, s, onBack = { showSettings = false })
         return
     }
+    // Geri tuşu: sonuç/hata ekranından uygulamayı kapatmak yerine başlangıca dön
+    BackHandler(enabled = !busy && (s.result != null || s.phase is Phase.Failed)) { vm.clearForNew() }
 
     Column(Modifier.fillMaxSize().background(SY.Bg).background(SY.background)) {
         Column(Modifier.statusBarsPadding().weight(1f)) {
@@ -309,7 +315,13 @@ private fun ResultSheet(
             s.refining?.let { RefineBanner(it) }
             Spacer(Modifier.height(12.dp))
             Tabs(s.tab) { t -> if (t == Tab.TRANSLATION) vm.openTranslation() else vm.setTab(t) }
-            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
+                Text(
+                    if (s.paragraphView) "☰ Satır görünümü" else "¶ Paragraf görünümü",
+                    color = SY.Accent, fontSize = 12.5.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = vm::toggleParagraph).padding(6.dp),
+                )
+            }
             when (s.tab) {
                 Tab.TEXT -> Segments(r.segments, s, vm, highlight = true)
                 Tab.TRANSLATION -> TranslationPane(s, vm)
@@ -364,7 +376,7 @@ private fun LivePane(s: MainState) {
                 Text(seg.text, fontSize = 16.sp, lineHeight = 22.sp, color = SY.Text, modifier = Modifier.weight(1f))
             }
         }
-    }
+    } }
 }
 
 @Composable
@@ -461,7 +473,18 @@ private fun Tabs(tab: Tab, onTab: (Tab) -> Unit) {
 
 @Composable
 private fun Segments(segments: List<Segment>, s: MainState, vm: MainViewModel, highlight: Boolean) {
-    Column {
+    if (s.paragraphView) {
+        // Paragraf görünümü: zaman damgası yok, tamamen seçilebilir/kopyalanabilir düz metin
+        SelectionContainer {
+            Text(
+                segments.joinToString(" ") { it.text }, fontSize = 16.5.sp, lineHeight = 25.sp, color = SY.Text,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+        return
+    }
+    // Satır görünümü: dokun → sese atla; basılı tut → metni seç/kopyala
+    SelectionContainer { Column {
         segments.forEach { seg ->
             val current = highlight && s.playing && s.positionMs >= seg.startMs && s.positionMs < seg.endMs
             Row(
@@ -478,7 +501,7 @@ private fun Segments(segments: List<Segment>, s: MainState, vm: MainViewModel, h
                 Text(seg.text, fontSize = 16.sp, lineHeight = 22.sp, color = SY.Text, modifier = Modifier.weight(1f))
             }
         }
-    }
+    } }
 }
 
 @Composable
@@ -534,6 +557,7 @@ private fun Action(icon: String, label: String, modifier: Modifier, onClick: () 
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun History(s: MainState, vm: MainViewModel) {
     val items = s.history.filter { it.id != s.result?.id }.take(8)
@@ -544,10 +568,13 @@ private fun History(s: MainState, vm: MainViewModel) {
     ) {
         Text("Son:", fontSize = 12.sp, color = SY.Muted)
         items.forEach { t ->
-            Pill(t.preview, bg = SY.Card, fg = SY.Text, bold = false, modifier = Modifier.padding(start = 8.dp)) {
-                vm.openHistory(t)
-            }
+            Box(
+                Modifier.padding(start = 8.dp).clip(CircleShape).background(SY.Card)
+                    .combinedClickable(onClick = { vm.openHistory(t) }, onLongClick = { vm.deleteHistory(t) })
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) { Text(t.preview, color = SY.Text, fontSize = 13.sp, maxLines = 1) }
         }
+        Text("  (silmek için basılı tut)", fontSize = 11.sp, color = SY.Muted)
     }
 }
 

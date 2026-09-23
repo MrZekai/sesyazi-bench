@@ -84,6 +84,8 @@ data class MainState(
     val refining: String? = null,
     /** Türkçe sonuç Dengeli/Hızlı ile çıktıysa "En iyi ile tekrar dene" önerisi. */
     val suggestBest: Boolean = false,
+    /** Metni zaman damgasız paragraf olarak göster. */
+    val paragraphView: Boolean = false,
     /** Artınca UI uzun işlem için geçiş reklamı dener (tek seferlik olay sayacı). */
     val adRequest: Int = 0,
     /** Ayarlar ekranındaki model indirmeleri (0..1). */
@@ -140,6 +142,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun downloadModel(m: WhisperModel) {
         if (m in state.value.modelDownloads) return
+        warnIfMetered(m)
         viewModelScope.launch {
             _state.update { it.copy(modelDownloads = it.modelDownloads + (m to 0f)) }
             val ok = runCatching {
@@ -151,6 +154,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
 
     fun setTab(t: Tab) = _state.update { it.copy(tab = t) }
+    fun toggleParagraph() = _state.update { it.copy(paragraphView = !it.paragraphView) }
     fun toastShown() = _state.update { it.copy(toast = null) }
     fun toast(msg: String) = _state.update { it.copy(toast = msg) }
 
@@ -202,9 +206,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         work = viewModelScope.launch { transcribeCurrent() }
     }
 
-    /** İşlemi şu kadar sürecekse bekleme ekranına geçiş reklamı konabilir. */
-    private val adWorthyMs = 8_000L
-
     private suspend fun ensureModel(model: WhisperModel, onProgress: (Float) -> Unit): Boolean {
         if (!vadTried && !ModelStore.vadReady(ctx) && ModelStore.isReady(ctx, model)) {
             vadTried = true
@@ -245,6 +246,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val first = if (best) Quality.FAST else s.quality
 
         if (!ModelStore.isReady(ctx, first.model)) {
+            warnIfMetered(first.model)
             _state.update { it.copy(phase = Phase.Downloading(0f)) }
             if (!ensureModel(first.model) { p -> _state.update { it.copy(phase = Phase.Downloading(p)) } }) {
                 _state.update { it.copy(phase = Phase.Failed("Model indirilemedi. İnterneti kontrol et.")) }
@@ -258,7 +260,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 phase = Phase.Transcribing(0), live = emptyList(), etaSec = (eta / 1000).toInt(),
                 refining = null, suggestBest = false,
-                adRequest = if (eta >= adWorthyMs) it.adRequest + 1 else it.adRequest,
+                // Metin ekrana gelmeden önce geçiş reklamı (sınırlar Ads içinde); döküm arkada sürer
+                adRequest = it.adRequest + 1,
             )
         }
         val r = runWhisper(a, first.model, first.beam, s.lang, stream = true)
@@ -332,6 +335,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun rerunWithBest() {
         setQuality(Quality.BEST)
         retranscribe()
+    }
+
+    private fun warnIfMetered(m: WhisperModel) {
+        val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java)
+        if (cm?.isActiveNetworkMetered == true) toast("Mobil veri ile ${m.approxMb} MB indiriliyor. Wi‑Fi önerilir.")
+    }
+
+    // --- Geçmiş ---
+    fun deleteHistory(t: Transcript) {
+        viewModelScope.launch {
+            val h = withContext(Dispatchers.IO) { HistoryStore.remove(ctx, t.id) }
+            _state.update { it.copy(history = h, toast = "Silindi") }
+        }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { HistoryStore.clear(ctx) }
+            _state.update { it.copy(history = emptyList(), toast = "Geçmiş temizlendi") }
+        }
     }
 
     /** Kayıtlı hedef dil kaynakla aynı değilse onu kullan, değilse akıllı varsayılan. */

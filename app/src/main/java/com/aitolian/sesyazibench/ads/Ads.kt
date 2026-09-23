@@ -26,17 +26,15 @@ object Ads {
     const val BANNER_ID = "ca-app-pub-3940256099942544/9214589741"        // test: adaptive banner
     const val INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712"  // test: interstitial
 
-    // Geçiş reklamı sınırları
-    private const val MIN_DOCS_BETWEEN = 2          // en az 2 dökümde bir
+    // Geçiş reklamı sınırları (her döküm başında denenir; bu sınırlar aşırılığı önler)
     private const val MIN_GAP_MS = 60_000L          // iki reklam arası en az 60 sn
-    private const val MAX_PER_HOUR = 3              // saatte en fazla 3
+    private const val MAX_PER_HOUR = 4              // saatte en fazla 4
 
     private val started = AtomicBoolean(false)
     private val _ready = MutableStateFlow(false)
     /** Rıza alındı ve SDK hazır — banner ancak o zaman istenir. */
     val ready: StateFlow<Boolean> = _ready
     private var interstitial: InterstitialAd? = null
-    private var docsSinceLast = 0
     private var lastShownAt = 0L
     private val shownTimes = ArrayDeque<Long>()
 
@@ -89,19 +87,30 @@ object Ads {
         }
     }
 
-    /** Her tamamlanan dökümde çağrılır. */
-    fun onTranscriptionDone() { docsSinceLast++ }
+    /**
+     * Uygulama Paylaş ile soğuk açıldığında reklam henüz yüklenmemiş olabilir:
+     * kısa bir süre bekleyip hazırsa gösterir. Döküm bu sırada arkada sürer.
+     */
+    suspend fun showWhenReady(activity: Activity, timeoutMs: Long = 3_000) {
+        var waited = 0L
+        while (interstitial == null && waited < timeoutMs) {
+            kotlinx.coroutines.delay(200); waited += 200
+        }
+        maybeShowInterstitial(activity) {}
+    }
+
+    /** Geriye dönük uyumluluk; artık sayaç tutulmuyor. */
+    fun onTranscriptionDone() {}
 
     /**
-     * "Yeni ses"e basıldığında: sınırlar uygunsa geçiş reklamı gösterir,
-     * ardından (ya da hemen) [then] çalışır. İşlem sırasında asla çağrılmaz.
+     * Döküm başladığında (metin ekrana gelmeden önce) sınırlar uygunsa geçiş
+     * reklamı gösterir; döküm reklamın arkasında sürer. Ardından [then] çalışır.
      */
     fun maybeShowInterstitial(activity: Activity, then: () -> Unit) {
         val now = SystemClock.elapsedRealtime()
         while (shownTimes.isNotEmpty() && now - shownTimes.first() > 3_600_000L) shownTimes.removeFirst()
         val ad = interstitial
         val allowed = ad != null &&
-            docsSinceLast >= MIN_DOCS_BETWEEN &&
             (lastShownAt == 0L || now - lastShownAt >= MIN_GAP_MS) &&
             shownTimes.size < MAX_PER_HOUR
         if (!allowed) { then(); return }
@@ -118,7 +127,6 @@ object Ads {
                 then()
             }
         }
-        docsSinceLast = 0
         lastShownAt = now
         shownTimes.addLast(now)
         ad.show(activity)
