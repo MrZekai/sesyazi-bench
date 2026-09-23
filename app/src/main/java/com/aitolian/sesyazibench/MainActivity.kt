@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Ads.start(this)
         askNotificationPermissionOnce()
+        ShareIntegration.publishShareShortcut(this)
         if (savedInstanceState == null) handleShare(intent)
         setContent {
             SesYaziTheme {
@@ -42,7 +43,6 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Notifier.appVisible = true
-        vm.refreshVoiceNotes() // WhatsApp'tan dönünce yeni sesli mesajlar listelensin
     }
 
     override fun onStop() {
@@ -73,6 +73,9 @@ class MainActivity : ComponentActivity() {
         } else {
             @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
         }
-        uri?.let(vm::onAudio)
+        if (uri != null) {
+            ShareIntegration.reportUsed(this) // paylaş listesinde öne çıkma sinyali
+            vm.onAudio(uri)
+        }
     }
 }

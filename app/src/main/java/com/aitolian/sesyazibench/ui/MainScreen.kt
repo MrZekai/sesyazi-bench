@@ -69,9 +69,9 @@ import com.aitolian.sesyazibench.Tab
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ads.BannerAd
 import com.aitolian.sesyazibench.data.Transcript
-import com.aitolian.sesyazibench.data.VoiceNotes
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
+import com.aitolian.sesyazibench.R
+import com.aitolian.sesyazibench.ShareIntegration
+import androidx.compose.ui.res.stringResource
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.Segment
 import com.aitolian.sesyazibench.engine.TRANSLATABLE
@@ -85,7 +85,6 @@ private val AUDIO_TYPES = arrayOf("audio/*", "video/*", "application/ogg")
  * V1 · Neon Mor ana ekran.
  * [onNewAudio]: "+ Yeni ses" — geçiş reklamı (sınırlıysa atlanır) sonra verilen işi çalıştırır.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     vm: MainViewModel,
@@ -108,44 +107,30 @@ fun MainScreen(
         s.toast?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); vm.toastShown() }
     }
     val busy = s.phase is Phase.Preparing || s.phase is Phase.Downloading || s.phase is Phase.Transcribing
-    var showPicker by remember { mutableStateOf(false) }
-    val waLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let(vm::onWhatsAppFolderPicked)
+    // Ana giriş: WhatsApp'ın Paylaş menüsü (klasör izni yok); dosya seçici yan seçenek
+    val pickOtherFile = { if (!busy) picker.launch(AUDIO_TYPES) }
+    val openWhatsApp = {
+        if (!ShareIntegration.openWhatsApp(context)) {
+            vm.toast("WhatsApp bulunamadı, dosyadan seçebilirsin")
+            pickOtherFile()
+        }
     }
-    // Ana giriş WhatsApp sesli mesajları; genel dosya seçici yan seçenek
-    val pick = { if (!busy) { vm.refreshVoiceNotes(); showPicker = true } }
-    val pickOtherFile = { showPicker = false; if (!busy) picker.launch(AUDIO_TYPES) }
-    val grantWhatsApp = { waLauncher.launch(VoiceNotes.initialFolder) }
 
     if (showSettings) {
         SettingsScreen(vm, s, onBack = { showSettings = false })
         return
     }
-    if (showPicker) {
-        ModalBottomSheet(onDismissRequest = { showPicker = false }, containerColor = SY.Sheet) {
-            Column(Modifier.padding(horizontal = 18.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
-                VoiceNotePicker(
-                    s,
-                    onPick = { n -> showPicker = false; vm.onAudio(n.uri) },
-                    onGrant = grantWhatsApp,
-                    onOtherFile = pickOtherFile,
-                    onRefresh = { vm.refreshVoiceNotes() },
-                    maxItems = 30,
-                )
-            }
-        }
-    }
 
     Column(Modifier.fillMaxSize().background(SY.Bg).background(SY.background)) {
         Column(Modifier.statusBarsPadding().weight(1f)) {
             TopBar(onSettings = { showSettings = true })
-            Hero(s, busy, onPick = pick, onCancel = vm::cancelWork)
+            Hero(s, busy, onPick = openWhatsApp, onCancel = vm::cancelWork)
             Controls(s, busy, vm)
             Spacer(Modifier.height(14.dp))
             ResultSheet(
                 s, vm, Modifier.weight(1f),
-                onNew = { if (!busy) onNewAudio { vm.clearForNew(); pick() } },
-                picker = { VoiceNotePicker(s, { n -> vm.onAudio(n.uri) }, grantWhatsApp, pickOtherFile, { vm.refreshVoiceNotes() }) },
+                onNew = { if (!busy) onNewAudio { vm.clearForNew() } },
+                picker = { ShareGuide(onOpenWhatsApp = openWhatsApp, onOtherFile = pickOtherFile) },
             )
         }
         // Altta sabit banner — içerikle asla çakışmaz
@@ -161,7 +146,7 @@ private fun TopBar(onSettings: () -> Unit) {
         Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("SesYazı", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = SY.Text, modifier = Modifier.weight(1f))
+        Text(stringResource(R.string.app_name), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = SY.Text, modifier = Modifier.weight(1f))
         Box(
             Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onSettings),
             contentAlignment = Alignment.Center,
@@ -189,7 +174,7 @@ private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -
             is Phase.Transcribing -> "Yazıya dökülüyor…" to
                 (s.etaSec?.let { "Tahmini ~$it sn · " } ?: "") + "internet gerekmez, ses telefondan çıkmaz"
             is Phase.Failed -> "Bir sorun oldu" to p.message
-            Phase.Idle -> "Sesli mesaj seç" to "WhatsApp sesli mesajların · ya da mesaja uzun bas → Paylaş → SesYazı"
+            Phase.Idle -> "Sesli mesajı yazıya dök" to "WhatsApp'tan 3 dokunuşla · ses telefondan çıkmaz"
         }
         Text(title, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = SY.Text)
         Text(

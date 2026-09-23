@@ -59,7 +59,6 @@ import com.aitolian.sesyazibench.MainViewModel
 import com.aitolian.sesyazibench.Quality
 import com.aitolian.sesyazibench.ResultLog
 import com.aitolian.sesyazibench.ads.Ads
-import com.aitolian.sesyazibench.data.VoiceNotes
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.OnDeviceTranslator
 import com.aitolian.sesyazibench.engine.TRANSLATABLE
@@ -88,9 +87,6 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
     var notify by remember { mutableStateOf(vm.prefs.notifyWhenDone) }
 
     LaunchedEffect(refresh) { packs = runCatching { OnDeviceTranslator.downloadedLanguages() }.getOrDefault(emptyList()) }
-    val waLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let(vm::onWhatsAppFolderPicked)
-    }
 
     Column(Modifier.fillMaxSize().background(SY.Bg).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -164,18 +160,6 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                 Hint("Modeller Wi‑Fi'da indirmen önerilir. Silinen model gerektiğinde tekrar indirilir.")
             }
 
-            // --- WhatsApp ---
-            Group("WhatsApp") {
-                ItemRow(
-                    "Sesli mesaj klasörü",
-                    if (s.waGranted) "Erişim verildi · ${s.voiceNotes.size} sesli mesaj" else "Erişim yok",
-                ) {
-                    if (s.waGranted) TextAction("Kaldır", SY.Error) { vm.revokeWhatsApp() }
-                    else TextAction("Erişim ver", SY.Accent) { waLauncher.launch(VoiceNotes.initialFolder) }
-                }
-                Hint("Sadece WhatsApp sesli mesaj klasörü okunur. İstersen izin vermeden, WhatsApp'ta mesaja uzun basıp Paylaş ile de kullanabilirsin.")
-            }
-
             // --- Bildirimler ---
             Group("Bildirimler") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -212,7 +196,7 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                 }) {}
                 LinkRow("Geri bildirim gönder") {
                     val i = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$SUPPORT_EMAIL"))
-                        .putExtra(Intent.EXTRA_SUBJECT, "SesYazı geri bildirim (${appVersion(context)})")
+                        .putExtra(Intent.EXTRA_SUBJECT, context.getString(com.aitolian.sesyazibench.R.string.app_name) + " geri bildirim (${appVersion(context)})")
                     runCatching { context.startActivity(i) }
                 }
                 LinkRow("Uygulamayı puanla") {

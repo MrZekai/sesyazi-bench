@@ -13,8 +13,6 @@ import com.aitolian.sesyazibench.audio.peaks
 import com.aitolian.sesyazibench.data.HistoryStore
 import com.aitolian.sesyazibench.data.SpeedStore
 import com.aitolian.sesyazibench.data.Prefs
-import com.aitolian.sesyazibench.data.VoiceNote
-import com.aitolian.sesyazibench.data.VoiceNotes
 import com.aitolian.sesyazibench.data.Transcript
 import com.aitolian.sesyazibench.engine.EngineResult
 import com.aitolian.sesyazibench.engine.Lang
@@ -88,10 +86,6 @@ data class MainState(
     val suggestBest: Boolean = false,
     /** Artınca UI uzun işlem için geçiş reklamı dener (tek seferlik olay sayacı). */
     val adRequest: Int = 0,
-    /** WhatsApp sesli mesaj klasörüne izin verildi mi, son sesli mesajlar. */
-    val waGranted: Boolean = false,
-    val voiceNotes: List<VoiceNote> = emptyList(),
-    val voiceNotesLoading: Boolean = false,
     /** Ayarlar ekranındaki model indirmeleri (0..1). */
     val modelDownloads: Map<WhisperModel, Float> = emptyMap(),
 )
@@ -131,7 +125,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val h = HistoryStore.load(ctx)
             _state.update { it.copy(history = h) }
         }
-        refreshVoiceNotes()
     }
 
     fun setLang(l: Lang) = _state.update { it.copy(lang = l) }
@@ -156,38 +149,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // --- WhatsApp sesli mesajları ---
-    fun onWhatsAppFolderPicked(tree: Uri) {
-        runCatching { VoiceNotes.persist(ctx, tree) }
-        prefs.whatsappTree = tree
-        refreshVoiceNotes(showEmptyHint = true)
-    }
 
-    fun revokeWhatsApp() {
-        prefs.whatsappTree?.let { VoiceNotes.release(ctx, it) }
-        prefs.whatsappTree = null
-        _state.update { it.copy(waGranted = false, voiceNotes = emptyList()) }
-    }
-
-    fun refreshVoiceNotes(showEmptyHint: Boolean = false) {
-        val tree = prefs.whatsappTree
-        if (tree == null || !VoiceNotes.hasAccess(ctx, tree)) {
-            _state.update { it.copy(waGranted = false, voiceNotes = emptyList()) }
-            return
-        }
-        _state.update { it.copy(waGranted = true, voiceNotesLoading = true) }
-        viewModelScope.launch {
-            val list = withContext(Dispatchers.IO) { VoiceNotes.list(ctx, tree) }
-            _state.update {
-                it.copy(
-                    voiceNotes = list, voiceNotesLoading = false,
-                    toast = if (showEmptyHint && list.isEmpty())
-                        "Bu klasörde sesli mesaj bulunamadı. \"WhatsApp Voice Notes\" klasörünü seçtiğinden emin ol."
-                    else it.toast,
-                )
-            }
-        }
-    }
     fun setTab(t: Tab) = _state.update { it.copy(tab = t) }
     fun toastShown() = _state.update { it.copy(toast = null) }
     fun toast(msg: String) = _state.update { it.copy(toast = msg) }

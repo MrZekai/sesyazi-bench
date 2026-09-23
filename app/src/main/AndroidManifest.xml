@@ -8,6 +8,12 @@
     <!-- Yalnızca Ayarlar > Test araçları > ML Kit için (Android tanıyıcısı istiyor) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- "WhatsApp'ı aç" butonu için (Android 11+ paket görünürlüğü) -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -30,6 +36,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
             <!-- WhatsApp / Telegram / Dosyalar'dan "Paylaş" -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

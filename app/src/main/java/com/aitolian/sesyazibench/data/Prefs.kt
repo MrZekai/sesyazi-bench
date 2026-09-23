@@ -2,7 +2,6 @@ package com.aitolian.sesyazibench.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.net.Uri
 
 /** Kullanıcı tercihleri — cihazda, SharedPreferences. */
 class Prefs(context: Context) {
@@ -23,10 +22,6 @@ class Prefs(context: Context) {
     var notifyWhenDone: Boolean
         get() = p.getBoolean("notify", true)
         set(v) = p.edit().putBoolean("notify", v).apply()
-
-    var whatsappTree: Uri?
-        get() = p.getString("wa_tree", null)?.let(Uri::parse)
-        set(v) = p.edit().putString("wa_tree", v?.toString()).apply()
 
     var devMode: Boolean
         get() = p.getBoolean("dev", false)

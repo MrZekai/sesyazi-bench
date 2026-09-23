@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paylaş listesinde "doğrudan paylaşım" hedefi (ses/video paylaşıldığında öne çıkar) -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <share-target android:targetClass="com.aitolian.sesyazibench.MainActivity">
+        <data android:mimeType="audio/*" />
+        <data android:mimeType="video/*" />
+        <data android:mimeType="application/ogg" />
+        <category android:name="com.aitolian.sesyazibench.category.TRANSCRIBE" />
+    </share-target>
+</shortcuts>
