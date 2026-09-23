@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Notifier.appVisible = true
+        vm.refreshVoiceNotes() // WhatsApp'tan dönünce yeni sesli mesajlar listelensin
     }
 
     override fun onStop() {

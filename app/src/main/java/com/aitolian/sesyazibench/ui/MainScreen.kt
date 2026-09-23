@@ -69,6 +69,9 @@ import com.aitolian.sesyazibench.Tab
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ads.BannerAd
 import com.aitolian.sesyazibench.data.Transcript
+import com.aitolian.sesyazibench.data.VoiceNotes
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.Segment
 import com.aitolian.sesyazibench.engine.TRANSLATABLE
@@ -82,6 +85,7 @@ private val AUDIO_TYPES = arrayOf("audio/*", "video/*", "application/ogg")
  * V1 · Neon Mor ana ekran.
  * [onNewAudio]: "+ Yeni ses" — geçiş reklamı (sınırlıysa atlanır) sonra verilen işi çalıştırır.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     vm: MainViewModel,
@@ -104,7 +108,33 @@ fun MainScreen(
         s.toast?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); vm.toastShown() }
     }
     val busy = s.phase is Phase.Preparing || s.phase is Phase.Downloading || s.phase is Phase.Transcribing
-    val pick = { if (!busy) picker.launch(AUDIO_TYPES) }
+    var showPicker by remember { mutableStateOf(false) }
+    val waLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let(vm::onWhatsAppFolderPicked)
+    }
+    // Ana giriş WhatsApp sesli mesajları; genel dosya seçici yan seçenek
+    val pick = { if (!busy) { vm.refreshVoiceNotes(); showPicker = true } }
+    val pickOtherFile = { showPicker = false; if (!busy) picker.launch(AUDIO_TYPES) }
+    val grantWhatsApp = { waLauncher.launch(VoiceNotes.initialFolder) }
+
+    if (showSettings) {
+        SettingsScreen(vm, s, onBack = { showSettings = false })
+        return
+    }
+    if (showPicker) {
+        ModalBottomSheet(onDismissRequest = { showPicker = false }, containerColor = SY.Sheet) {
+            Column(Modifier.padding(horizontal = 18.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
+                VoiceNotePicker(
+                    s,
+                    onPick = { n -> showPicker = false; vm.onAudio(n.uri) },
+                    onGrant = grantWhatsApp,
+                    onOtherFile = pickOtherFile,
+                    onRefresh = { vm.refreshVoiceNotes() },
+                    maxItems = 30,
+                )
+            }
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(SY.Bg).background(SY.background)) {
         Column(Modifier.statusBarsPadding().weight(1f)) {
@@ -114,7 +144,8 @@ fun MainScreen(
             Spacer(Modifier.height(14.dp))
             ResultSheet(
                 s, vm, Modifier.weight(1f),
-                onNew = { if (!busy) onNewAudio { vm.clearForNew(); picker.launch(AUDIO_TYPES) } },
+                onNew = { if (!busy) onNewAudio { vm.clearForNew(); pick() } },
+                picker = { VoiceNotePicker(s, { n -> vm.onAudio(n.uri) }, grantWhatsApp, pickOtherFile, { vm.refreshVoiceNotes() }) },
             )
         }
         // Altta sabit banner — içerikle asla çakışmaz
@@ -122,7 +153,6 @@ fun MainScreen(
             if (adsReady) BannerAd() else Spacer(Modifier.fillMaxWidth().height(50.dp))
         }
     }
-    if (showSettings) SettingsDialog(vm, s, onDismiss = { showSettings = false })
 }
 
 @Composable
@@ -159,7 +189,7 @@ private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -
             is Phase.Transcribing -> "Yazıya dökülüyor…" to
                 (s.etaSec?.let { "Tahmini ~$it sn · " } ?: "") + "internet gerekmez, ses telefondan çıkmaz"
             is Phase.Failed -> "Bir sorun oldu" to p.message
-            Phase.Idle -> "Ses dosyası seç" to "veya sesli mesaja uzun bas → Paylaş → SesYazı"
+            Phase.Idle -> "Sesli mesaj seç" to "WhatsApp sesli mesajların · ya da mesaja uzun bas → Paylaş → SesYazı"
         }
         Text(title, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = SY.Text)
         Text(
@@ -262,7 +292,13 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
 }
 
 @Composable
-private fun ResultSheet(s: MainState, vm: MainViewModel, modifier: Modifier, onNew: () -> Unit) {
+private fun ResultSheet(
+    s: MainState,
+    vm: MainViewModel,
+    modifier: Modifier,
+    onNew: () -> Unit,
+    picker: @Composable () -> Unit,
+) {
     val context = LocalContext.current
     val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     Column(
@@ -282,7 +318,7 @@ private fun ResultSheet(s: MainState, vm: MainViewModel, modifier: Modifier, onN
         if (r == null && s.live.isNotEmpty()) {
             LivePane(s)
         } else if (r == null) {
-            EmptyState(s)
+            picker()
         } else {
             PlayerRow(s, vm)
             s.refining?.let { RefineBanner(it) }
@@ -372,23 +408,6 @@ private fun SuggestBestCard(onRun: () -> Unit) {
             Text("\"En iyi\" mod önce hızlı metni gösterir, sonra arka planda iyileştirir.", fontSize = 12.sp, color = SY.Muted)
         }
         Pill("En iyi ile dene", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(start = 8.dp), onClick = onRun)
-    }
-}
-
-@Composable
-private fun EmptyState(s: MainState) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SY.Card).padding(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            s.fileName ?: "Henüz döküm yok", color = SY.Text, fontSize = 15.sp,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            "WhatsApp'ta sesli mesaja uzun bas → ⋮ → Paylaş → SesYazı. Metin burada zaman damgalarıyla görünür.",
-            color = SY.Muted, fontSize = 12.5.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp),
-        )
     }
 }
 

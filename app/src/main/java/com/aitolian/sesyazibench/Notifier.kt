@@ -18,7 +18,7 @@ object Notifier {
     @Volatile var appVisible = true
 
     fun notifyDone(c: Context, preview: String) {
-        if (appVisible) return
+        if (appVisible || !com.aitolian.sesyazibench.data.Prefs(c).notifyWhenDone) return
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return

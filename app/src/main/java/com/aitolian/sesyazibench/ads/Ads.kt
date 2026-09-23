@@ -78,6 +78,17 @@ object Ads {
         )
     }
 
+    /** AB/UK'de kullanıcı reklam rızasını sonradan değiştirebilmeli (Ayarlar > Gizlilik). */
+    fun privacyOptionsRequired(activity: Activity): Boolean =
+        UserMessagingPlatform.getConsentInformation(activity).privacyOptionsRequirementStatus ==
+            ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED
+
+    fun showPrivacyOptions(activity: Activity) {
+        UserMessagingPlatform.showPrivacyOptionsForm(activity) { err ->
+            if (err != null) Log.w("Ads", "privacy options: ${err.message}")
+        }
+    }
+
     /** Her tamamlanan dökümde çağrılır. */
     fun onTranscriptionDone() { docsSinceLast++ }
 

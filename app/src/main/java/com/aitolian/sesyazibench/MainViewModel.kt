@@ -12,6 +12,9 @@ import com.aitolian.sesyazibench.audio.Player
 import com.aitolian.sesyazibench.audio.peaks
 import com.aitolian.sesyazibench.data.HistoryStore
 import com.aitolian.sesyazibench.data.SpeedStore
+import com.aitolian.sesyazibench.data.Prefs
+import com.aitolian.sesyazibench.data.VoiceNote
+import com.aitolian.sesyazibench.data.VoiceNotes
 import com.aitolian.sesyazibench.data.Transcript
 import com.aitolian.sesyazibench.engine.EngineResult
 import com.aitolian.sesyazibench.engine.Lang
@@ -85,6 +88,12 @@ data class MainState(
     val suggestBest: Boolean = false,
     /** Artınca UI uzun işlem için geçiş reklamı dener (tek seferlik olay sayacı). */
     val adRequest: Int = 0,
+    /** WhatsApp sesli mesaj klasörüne izin verildi mi, son sesli mesajlar. */
+    val waGranted: Boolean = false,
+    val voiceNotes: List<VoiceNote> = emptyList(),
+    val voiceNotesLoading: Boolean = false,
+    /** Ayarlar ekranındaki model indirmeleri (0..1). */
+    val modelDownloads: Map<WhisperModel, Float> = emptyMap(),
 )
 
 /** Çeviri hedefi: telefonun dili; kaynak zaten o dilse İngilizce (kaynak İngilizceyse Türkçe). */
@@ -109,15 +118,76 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val cancel = AtomicBoolean(false)
     private var vadTried = false
 
+    val prefs = Prefs(app)
+
     init {
+        // Kayıtlı tercihler; hiç seçilmemişse yavaş telefonda (≤2 güçlü çekirdek) varsayılan Hızlı
+        val q = prefs.defaultQuality?.let { n -> Quality.entries.firstOrNull { it.name == n } }
+            ?: if (WhisperEngine.threadCount() <= 2) Quality.FAST else Quality.BALANCED
+        val l = prefs.defaultLang?.let { langOf(it) } ?: Lang.AUTO
+        val target = prefs.translateTarget?.let { langOf(it) }
+        _state.update { it.copy(quality = q, lang = l, translationTarget = target ?: it.translationTarget) }
         viewModelScope.launch(Dispatchers.IO) {
             val h = HistoryStore.load(ctx)
             _state.update { it.copy(history = h) }
         }
+        refreshVoiceNotes()
     }
 
     fun setLang(l: Lang) = _state.update { it.copy(lang = l) }
     fun setQuality(q: Quality) = _state.update { it.copy(quality = q) }
+
+    // --- Ayarlar (kalıcı varsayılanlar) ---
+    fun setDefaultLang(l: Lang) { prefs.defaultLang = l.code; setLang(l) }
+    fun setDefaultQuality(q: Quality) { prefs.defaultQuality = q.name; setQuality(q) }
+    fun setDefaultTarget(l: Lang) {
+        prefs.translateTarget = l.code
+        _state.update { it.copy(translationTarget = l) }
+    }
+
+    fun downloadModel(m: WhisperModel) {
+        if (m in state.value.modelDownloads) return
+        viewModelScope.launch {
+            _state.update { it.copy(modelDownloads = it.modelDownloads + (m to 0f)) }
+            val ok = runCatching {
+                ModelStore.download(ctx, m) { p -> _state.update { it.copy(modelDownloads = it.modelDownloads + (m to p)) } }
+            }.isSuccess
+            _state.update { it.copy(modelDownloads = it.modelDownloads - m, toast = if (ok) "${m.approxMb} MB model hazır" else "İndirilemedi, interneti kontrol et") }
+        }
+    }
+
+    // --- WhatsApp sesli mesajları ---
+    fun onWhatsAppFolderPicked(tree: Uri) {
+        runCatching { VoiceNotes.persist(ctx, tree) }
+        prefs.whatsappTree = tree
+        refreshVoiceNotes(showEmptyHint = true)
+    }
+
+    fun revokeWhatsApp() {
+        prefs.whatsappTree?.let { VoiceNotes.release(ctx, it) }
+        prefs.whatsappTree = null
+        _state.update { it.copy(waGranted = false, voiceNotes = emptyList()) }
+    }
+
+    fun refreshVoiceNotes(showEmptyHint: Boolean = false) {
+        val tree = prefs.whatsappTree
+        if (tree == null || !VoiceNotes.hasAccess(ctx, tree)) {
+            _state.update { it.copy(waGranted = false, voiceNotes = emptyList()) }
+            return
+        }
+        _state.update { it.copy(waGranted = true, voiceNotesLoading = true) }
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { VoiceNotes.list(ctx, tree) }
+            _state.update {
+                it.copy(
+                    voiceNotes = list, voiceNotesLoading = false,
+                    toast = if (showEmptyHint && list.isEmpty())
+                        "Bu klasörde sesli mesaj bulunamadı. \"WhatsApp Voice Notes\" klasörünü seçtiğinden emin ol."
+                    else it.toast,
+                )
+            }
+        }
+    }
     fun setTab(t: Tab) = _state.update { it.copy(tab = t) }
     fun toastShown() = _state.update { it.copy(toast = null) }
     fun toast(msg: String) = _state.update { it.copy(toast = msg) }
@@ -257,7 +327,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 phase = Phase.Idle, result = t, history = h, live = emptyList(), etaSec = null,
-                translation = null, translating = null, translationTarget = defaultTarget(t.language),
+                translation = null, translating = null, translationTarget = targetFor(t.language),
                 refining = if (best) "✨ En iyi model hazırlanıyor…" else null,
                 suggestBest = !best && detected == Lang.TR.code,
             )
@@ -302,6 +372,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         retranscribe()
     }
 
+    /** Kayıtlı hedef dil kaynakla aynı değilse onu kullan, değilse akıllı varsayılan. */
+    private fun targetFor(source: String): Lang =
+        prefs.translateTarget?.let { langOf(it) }?.takeIf { it.code != source } ?: defaultTarget(source)
+
     fun cancelWork() {
         cancel.set(true)
         _state.update { it.copy(refining = null) }
@@ -318,7 +392,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 result = t, fileName = t.fileName, audioMs = t.durationMs, hasAudio = false,
                 waveform = FloatArray(0), tab = Tab.TEXT, phase = Phase.Idle, positionMs = 0,
-                translation = null, translating = null, translationTarget = defaultTarget(t.language),
+                translation = null, translating = null, translationTarget = targetFor(t.language),
                 suggestBest = false,
             )
         }
