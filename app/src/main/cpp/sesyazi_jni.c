@@ -93,6 +93,33 @@ static bool on_abort(void *user) {
 }
 
 /*
+ * "auto" modunda dili yalnızca uygulamanın desteklediği diller arasından seçer.
+ * Neden: Whisper, Türk aksanıyla konuşulan Almancayı sık sık Yidiş (yi) sanıp
+ * İbrani alfabesiyle yazıyor; benzer karışıklıklar başka diller için de var.
+ */
+static const char *ALLOWED_LANGS[] = { "tr", "en", "de", "fr", "es", "it", "pt", "ru", "ar", "hi", "id", NULL };
+
+static const char *detect_allowed_language(struct whisper_context *ctx, const float *samples, int n, int threads) {
+    // İlk 30 sn yeterli; whisper_lang_auto_detect mel spektrogramı ister
+    int take = n < 16000 * 30 ? n : 16000 * 30;
+    if (whisper_pcm_to_mel(ctx, samples, take, threads) != 0) return "auto";
+    int max_id = whisper_lang_max_id();
+    float *probs = (float *) calloc((size_t) max_id + 1, sizeof(float));
+    if (!probs) return "auto";
+    const char *best = "auto";
+    if (whisper_lang_auto_detect(ctx, 0, threads, probs) >= 0) {
+        float best_p = -1.0f;
+        for (int i = 0; ALLOWED_LANGS[i]; i++) {
+            int id = whisper_lang_id(ALLOWED_LANGS[i]);
+            if (id >= 0 && id <= max_id && probs[id] > best_p) { best_p = probs[id]; best = ALLOWED_LANGS[i]; }
+        }
+        LOGI("lang detect (allowed): %s p=%.3f", best, best_p);
+    }
+    free(probs);
+    return best;
+}
+
+/*
  * UTF-8 bayt dizisi döner (NewStringUTF, bölünmüş çok baytlı Türkçe
  * karakterlerde çöker; bu yüzden çözme Kotlin'de yapılır).
  * Çıktı biçimi (satır satır):
@@ -136,7 +163,8 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
     p.no_context = true;
     p.single_segment = false;
     p.n_threads = threads;
-    p.language = language;               // "auto" => otomatik algılama
+    // "auto" => yalnızca desteklenen diller arasından algıla
+    p.language = strcmp(language, "auto") == 0 ? detect_allowed_language(ctx, samples, n, threads) : language;
     p.detect_language = false;
     p.suppress_blank = true;
     if (vad) {
