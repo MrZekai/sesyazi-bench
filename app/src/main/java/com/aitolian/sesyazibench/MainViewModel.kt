@@ -16,6 +16,11 @@ import com.aitolian.sesyazibench.engine.EngineResult
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.MlKitEngine
 import com.aitolian.sesyazibench.engine.ModelStore
+import com.aitolian.sesyazibench.engine.OnDeviceTranslator
+import com.aitolian.sesyazibench.engine.Segment
+import com.aitolian.sesyazibench.engine.langOf
+import com.aitolian.sesyazibench.audio.DecodeException
+import java.util.Locale
 import com.aitolian.sesyazibench.engine.WhisperEngine
 import com.aitolian.sesyazibench.engine.WhisperModel
 import kotlinx.coroutines.Dispatchers
@@ -30,9 +35,14 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
-enum class Quality(val label: String, val model: WhisperModel) {
-    FAST("Hızlı", WhisperModel.BASE),
-    BALANCED("Dengeli", WhisperModel.SMALL),
+/**
+ * Kalite seviyeleri. beam > 1 → beam search (daha doğru, ~1,5-2x yavaş).
+ * Türkçe için base zayıf kalıyor; varsayılan Dengeli (small).
+ */
+enum class Quality(val label: String, val model: WhisperModel, val beam: Int) {
+    FAST("Hızlı", WhisperModel.BASE, 1),
+    BALANCED("Dengeli", WhisperModel.SMALL, 3),
+    BEST("En iyi", WhisperModel.TURBO, 3),
 }
 
 sealed interface Phase {
@@ -43,12 +53,12 @@ sealed interface Phase {
     data class Failed(val message: String) : Phase
 }
 
-enum class Tab { TEXT, TRANSLATION, SUMMARY }
+enum class Tab { TEXT, TRANSLATION }
 
 data class MainState(
     val phase: Phase = Phase.Idle,
-    val lang: Lang = Lang.TR,
-    val quality: Quality = Quality.FAST,
+    val lang: Lang = Lang.AUTO,
+    val quality: Quality = Quality.BALANCED,
     val fileName: String? = null,
     val audioMs: Long = 0,
     val waveform: FloatArray = FloatArray(0),
@@ -58,9 +68,22 @@ data class MainState(
     val result: Transcript? = null,
     val history: List<Transcript> = emptyList(),
     val tab: Tab = Tab.TEXT,
+    val translation: List<Segment>? = null,
+    val translationTarget: Lang = defaultTarget(null),
+    val translating: String? = null,
     val toast: String? = null,
     val testLog: List<String> = emptyList(),
 )
+
+/** Çeviri hedefi: telefonun dili; kaynak zaten o dilse İngilizce (kaynak İngilizceyse Türkçe). */
+fun defaultTarget(source: String?): Lang {
+    val device = langOf(Locale.getDefault().language)?.takeIf { it != Lang.AUTO }
+    return when {
+        device != null && device.code != source -> device
+        source != Lang.EN.code -> Lang.EN
+        else -> Lang.TR
+    }
+}
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
@@ -72,6 +95,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var work: Job? = null
     private var ticker: Job? = null
     private val cancel = AtomicBoolean(false)
+    private var vadTried = false
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -91,7 +115,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (work?.isActive == true) { toast("Önce mevcut işlem bitsin"); return }
         stopPlayback()
         work = viewModelScope.launch {
-            _state.update { it.copy(phase = Phase.Preparing("Ses hazırlanıyor…"), result = null, tab = Tab.TEXT) }
+            _state.update {
+                it.copy(phase = Phase.Preparing("Ses hazırlanıyor…"), result = null, tab = Tab.TEXT, translation = null)
+            }
             try {
                 val name = withContext(Dispatchers.IO) { displayName(uri) }
                 val copy = withContext(Dispatchers.IO) { copyToCache(uri, name) }
@@ -106,6 +132,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 transcribeCurrent()
+            } catch (t: DecodeException) {
+                _state.update { it.copy(phase = Phase.Failed(t.message ?: "Ses açılamadı")) }
+            } catch (t: OutOfMemoryError) {
+                _state.update { it.copy(phase = Phase.Failed("Dosya bu telefon için çok büyük")) }
             } catch (t: Throwable) {
                 _state.update { it.copy(phase = Phase.Failed("Ses açılamadı: ${t.message ?: t.javaClass.simpleName}")) }
             }
@@ -114,7 +144,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Dil veya kalite değişince aynı sesi yeniden dökmek için. */
     fun retranscribe() {
-        if (audio == null || work?.isActive == true) return
+        if (work?.isActive == true) return
+        if (audio == null) {
+            if (state.value.result != null) toast("Yeni ayar bir sonraki seste geçerli olacak")
+            return
+        }
         work = viewModelScope.launch { transcribeCurrent() }
     }
 
@@ -122,6 +156,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val a = audio ?: return
         val s = state.value
         val model = s.quality.model
+        if (!vadTried && !ModelStore.vadReady(ctx) && ModelStore.isReady(ctx, model)) {
+            vadTried = true
+            ModelStore.ensureVad(ctx)
+        }
         if (!ModelStore.isReady(ctx, model)) {
             _state.update { it.copy(phase = Phase.Downloading(0f)) }
             try {
@@ -133,7 +171,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         cancel.set(false)
         _state.update { it.copy(phase = Phase.Transcribing(0)) }
-        val r = WhisperEngine(ctx, model).transcribe(
+        val r = WhisperEngine(ctx, model, s.quality.beam).transcribe(
             a, s.lang,
             onProgress = { p -> _state.update { it.copy(phase = Phase.Transcribing(p.coerceIn(0, 100))) } },
             cancel = cancel,
@@ -144,7 +182,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         if (r.segments.isEmpty()) {
-            _state.update { it.copy(phase = Phase.Failed("Konuşma algılanamadı. Dil seçimini kontrol et.")) }
+            _state.update {
+                it.copy(phase = Phase.Failed("Konuşma algılanamadı. Seste net konuşma yoksa (ör. müzik) metin çıkmaz."))
+            }
             return
         }
         val t = Transcript(
@@ -157,7 +197,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
         val h = withContext(Dispatchers.IO) { HistoryStore.add(ctx, t) }
         Ads.onTranscriptionDone()
-        _state.update { it.copy(phase = Phase.Idle, result = t, history = h) }
+        _state.update {
+            it.copy(
+                phase = Phase.Idle, result = t, history = h, translation = null, translating = null,
+                translationTarget = defaultTarget(t.language),
+            )
+        }
     }
 
     fun cancelWork() { cancel.set(true) }
@@ -171,6 +216,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 result = t, fileName = t.fileName, audioMs = t.durationMs, hasAudio = false,
                 waveform = FloatArray(0), tab = Tab.TEXT, phase = Phase.Idle, positionMs = 0,
+                translation = null, translating = null, translationTarget = defaultTarget(t.language),
             )
         }
     }
@@ -180,7 +226,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         audio = null
         player.setSource(null)
         _state.update {
-            it.copy(result = null, fileName = null, hasAudio = false, waveform = FloatArray(0), phase = Phase.Idle, positionMs = 0)
+            it.copy(
+                result = null, fileName = null, hasAudio = false, waveform = FloatArray(0), phase = Phase.Idle,
+                positionMs = 0, translation = null, translating = null,
+            )
+        }
+    }
+
+    // --- Çeviri ---
+    private var translateJob: Job? = null
+
+    /** Çeviri sekmesini açar; henüz çeviri yoksa başlatır. */
+    fun openTranslation() {
+        setTab(Tab.TRANSLATION)
+        if (state.value.translation == null && state.value.translating == null) translate(state.value.translationTarget)
+    }
+
+    fun translate(target: Lang) {
+        val r = state.value.result ?: return
+        val source = langOf(r.language) ?: run { toast("Kaynak dil tanınmadı"); return }
+        if (source == target) {
+            _state.update { it.copy(translationTarget = target, translation = r.segments, translating = null) }
+            return
+        }
+        if (!OnDeviceTranslator.supports(source)) { toast("${source.label} için çeviri desteklenmiyor"); return }
+        translateJob?.cancel()
+        _state.update { it.copy(translationTarget = target, translation = null, translating = "Hazırlanıyor…") }
+        translateJob = viewModelScope.launch {
+            try {
+                val out = OnDeviceTranslator.translate(r.segments, source, target) { msg ->
+                    _state.update { it.copy(translating = msg) }
+                }
+                _state.update { if (it.result?.id == r.id) it.copy(translation = out, translating = null) else it }
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                _state.update {
+                    it.copy(translating = null, toast = "Çeviri yapılamadı: ${t.message ?: "internet bağlantısını kontrol et"}")
+                }
+            }
         }
     }
 

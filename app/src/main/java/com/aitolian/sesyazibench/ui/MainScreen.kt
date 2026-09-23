@@ -68,6 +68,9 @@ import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ads.BannerAd
 import com.aitolian.sesyazibench.data.Transcript
 import com.aitolian.sesyazibench.engine.Lang
+import com.aitolian.sesyazibench.engine.Segment
+import com.aitolian.sesyazibench.engine.TRANSLATABLE
+import com.aitolian.sesyazibench.engine.langOf
 import java.io.File
 import java.util.Locale
 
@@ -214,13 +217,13 @@ private fun WaveIcon(color: Color, iconSize: Dp) {
 private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
     var langOpen by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().padding(top = 10.dp),
+        Modifier.fillMaxWidth().padding(top = 10.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
             Pill("🌐 ${s.lang.label} ▾", bg = SY.Chip, fg = SY.Text, onClick = { if (!busy) langOpen = true })
             DropdownMenu(expanded = langOpen, onDismissRequest = { langOpen = false }) {
-                Lang.entries.filter { it != Lang.AUTO }.forEach { l ->
+                (listOf(Lang.AUTO) + TRANSLATABLE).forEach { l ->
                     DropdownMenuItem(text = { Text(l.label) }, onClick = {
                         langOpen = false
                         if (l != s.lang) { vm.setLang(l); vm.retranscribe() }
@@ -234,7 +237,13 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
             Pill(
                 q.label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
                 modifier = Modifier.padding(end = 8.dp),
-                onClick = { if (!busy && !sel) { vm.setQuality(q); vm.retranscribe() } },
+                onClick = {
+                    if (!busy && !sel) {
+                        vm.setQuality(q)
+                        if (q == Quality.BEST) vm.toast("En iyi: ${q.model.approxMb} MB model, orta seviye telefonlarda yavaş")
+                        vm.retranscribe()
+                    }
+                },
             )
         }
     }
@@ -263,19 +272,28 @@ private fun ResultSheet(s: MainState, vm: MainViewModel, modifier: Modifier, onN
         } else {
             PlayerRow(s, vm)
             Spacer(Modifier.height(12.dp))
-            Tabs(s.tab, vm::setTab)
+            Tabs(s.tab) { t -> if (t == Tab.TRANSLATION) vm.openTranslation() else vm.setTab(t) }
             Spacer(Modifier.height(8.dp))
             when (s.tab) {
-                Tab.TEXT -> Segments(r, s, vm)
-                Tab.TRANSLATION -> ComingSoon("Çeviri", "Metni cihazda başka dile çevirme bir sonraki sürümde geliyor.")
-                Tab.SUMMARY -> ComingSoon("Özet", "Uzun sesler için kısa özet bir sonraki sürümde geliyor.")
+                Tab.TEXT -> Segments(r.segments, s, vm, highlight = true)
+                Tab.TRANSLATION -> TranslationPane(s, vm)
             }
+            // Kopyala / Paylaş / SRT, açık olan sekmenin metnini kullanır
+            val shown = if (s.tab == Tab.TRANSLATION) s.translation else r.segments
+            val suffix = if (s.tab == Tab.TRANSLATION) "_${s.translationTarget.code}" else ""
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Action("⧉", "Kopyala", Modifier.weight(1f)) { copy(context, r.text); vm.toast("Kopyalandı") }
-                Action("↗", "Paylaş", Modifier.weight(1f)) { shareText(context, r.text) }
-                Action("文A", "Çevir", Modifier.weight(1f)) { vm.setTab(Tab.TRANSLATION) }
-                Action("⤓", "SRT / TXT", Modifier.weight(1f)) { shareSrt(context, r) }
+                Action("⧉", "Kopyala", Modifier.weight(1f)) {
+                    if (shown == null) vm.toast("Çeviri henüz hazır değil")
+                    else { copy(context, shown.joinToString(" ") { it.text }); vm.toast("Kopyalandı") }
+                }
+                Action("↗", "Paylaş", Modifier.weight(1f)) {
+                    if (shown == null) vm.toast("Çeviri henüz hazır değil") else shareText(context, shown.joinToString(" ") { it.text })
+                }
+                Action("文A", "Çevir", Modifier.weight(1f)) { vm.openTranslation() }
+                Action("⤓", "SRT / TXT", Modifier.weight(1f)) {
+                    if (shown == null) vm.toast("Çeviri henüz hazır değil") else shareSrt(context, r, shown, suffix)
+                }
             }
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -357,7 +375,7 @@ private fun Waveform(peaks: FloatArray, progress: Float, modifier: Modifier) {
 @Composable
 private fun Tabs(tab: Tab, onTab: (Tab) -> Unit) {
     Row(Modifier.fillMaxWidth().clip(CircleShape).background(SY.Card).padding(3.dp)) {
-        listOf(Tab.TEXT to "Metin", Tab.TRANSLATION to "Çeviri", Tab.SUMMARY to "Özet").forEach { (t, label) ->
+        listOf(Tab.TEXT to "Metin", Tab.TRANSLATION to "Çeviri").forEach { (t, label) ->
             val sel = t == tab
             Box(
                 Modifier.weight(1f).clip(CircleShape).background(if (sel) SY.Accent else Color.Transparent)
@@ -374,10 +392,10 @@ private fun Tabs(tab: Tab, onTab: (Tab) -> Unit) {
 }
 
 @Composable
-private fun Segments(r: Transcript, s: MainState, vm: MainViewModel) {
+private fun Segments(segments: List<Segment>, s: MainState, vm: MainViewModel, highlight: Boolean) {
     Column {
-        r.segments.forEach { seg ->
-            val current = s.playing && s.positionMs >= seg.startMs && s.positionMs < seg.endMs
+        segments.forEach { seg ->
+            val current = highlight && s.playing && s.positionMs >= seg.startMs && s.positionMs < seg.endMs
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     .background(if (current) SY.Card else Color.Transparent)
@@ -396,10 +414,43 @@ private fun Segments(r: Transcript, s: MainState, vm: MainViewModel) {
 }
 
 @Composable
-private fun ComingSoon(title: String, body: String) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SY.Card).padding(16.dp)) {
-        Text("$title · yakında", color = SY.Accent, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-        Text(body, color = SY.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+private fun TranslationPane(s: MainState, vm: MainViewModel) {
+    var open by remember { mutableStateOf(false) }
+    val source = s.result?.language
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
+            Text(
+                "${langOf(source)?.label ?: source} →", fontSize = 13.sp, color = SY.Muted,
+                modifier = Modifier.padding(end = 8.dp),
+            )
+            Box {
+                Pill("${s.translationTarget.label} ▾", bg = SY.Chip, fg = SY.Text, onClick = { if (s.translating == null) open = true })
+                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    TRANSLATABLE.filter { it.code != source }.forEach { l ->
+                        DropdownMenuItem(text = { Text(l.label) }, onClick = { open = false; vm.translate(l) })
+                    }
+                }
+            }
+        }
+        val status = s.translating
+        val tr = s.translation
+        when {
+            status != null -> Row(
+                Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.size(18.dp), color = SY.Accent, strokeWidth = 2.dp)
+                Text(status, color = SY.Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 10.dp))
+            }
+            tr != null -> Segments(tr, s, vm, highlight = false)
+            else -> Pill(
+                "Çevir", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(10.dp),
+                onClick = { vm.translate(s.translationTarget) },
+            )
+        }
+        Text(
+            "Çeviri cihazda yapılır; her dil paketi yalnızca ilk seferde indirilir.",
+            fontSize = 11.5.sp, color = SY.Muted, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -452,7 +503,7 @@ fun Pill(
     }
 }
 
-private fun langName(code: String) = Lang.entries.firstOrNull { it.code == code }?.label ?: code
+private fun langName(code: String) = langOf(code)?.label ?: code
 
 private fun copy(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -464,15 +515,16 @@ private fun shareText(context: Context, text: String) {
     context.startActivity(Intent.createChooser(i, "Paylaş"))
 }
 
-private fun shareSrt(context: Context, t: Transcript) {
+private fun shareSrt(context: Context, t: Transcript, segments: List<Segment>, suffix: String) {
     val dir = File(context.filesDir, "results").apply { mkdirs() }
-    val base = t.fileName.substringBeforeLast('.').ifBlank { "sesyazi" }
-    val srt = File(dir, "$base.srt").apply { writeText(t.toSrt()) }
+    val base = t.fileName.substringBeforeLast('.').ifBlank { "sesyazi" } + suffix
+    val view = t.copy(segments = segments)
+    val srt = File(dir, "$base.srt").apply { writeText(view.toSrt()) }
     val uri = FileProvider.getUriForFile(context, context.packageName + ".files", srt)
     val i = Intent(Intent.ACTION_SEND).apply {
         type = "application/x-subrip"
         putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_TEXT, t.toTxt())
+        putExtra(Intent.EXTRA_TEXT, view.toTxt())
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(Intent.createChooser(i, "SRT / TXT paylaş"))

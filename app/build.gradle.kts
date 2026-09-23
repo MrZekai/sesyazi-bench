@@ -68,6 +68,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+
+    // ML Kit çeviri — cihaz içi, dil paketi ilk kullanımda indirilir
+    implementation("com.google.mlkit:translate:17.0.3")
 
     // AdMob + UMP rıza formu (şimdilik yalnızca test reklam ID'leri)
     implementation("com.google.android.gms:play-services-ads:24.4.0")

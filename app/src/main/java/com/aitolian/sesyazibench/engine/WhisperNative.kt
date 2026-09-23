@@ -15,6 +15,7 @@ object WhisperNative {
     external fun nativeFree(ctx: Long)
     external fun nativeSystemInfo(): String
     external fun nativeTranscribe(
-        ctx: Long, pcm: FloatArray, lang: String, threads: Int, audioCtx: Int, listener: ProgressListener?,
+        ctx: Long, pcm: FloatArray, lang: String, threads: Int, beamSize: Int, vadModelPath: String?,
+        listener: ProgressListener?,
     ): ByteArray
 }

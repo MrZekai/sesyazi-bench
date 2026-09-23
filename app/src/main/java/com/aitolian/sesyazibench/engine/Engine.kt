@@ -36,8 +36,13 @@ enum class Lang(val code: String, val label: String, val mlKitTag: String?) {
     AR("ar", "العربية", null),
     HI("hi", "हिन्दी", "hi-IN"),
     ID("id", "Bahasa Indonesia", null),
-    AUTO("auto", "Otomatik (yalnız Whisper)", null),
+    AUTO("auto", "Otomatik", null),
 }
+
+/** Çeviri hedefi olabilecek diller (otomatik hariç). */
+val TRANSLATABLE: List<Lang> = Lang.entries.filter { it != Lang.AUTO }
+
+fun langOf(code: String?): Lang? = Lang.entries.firstOrNull { it.code == code }
 
 interface TranscriptionEngine {
     val name: String

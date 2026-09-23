@@ -74,7 +74,8 @@ static jbyteArray to_bytes(JNIEnv *env, const char *s) {
 struct progress_ctx {
     JNIEnv *env;
     jobject listener;
-    jmethodID method;
+    jmethodID method;       // onProgress(I)V
+    jmethodID cancelled;    // isCancelled()Z — bir kez çözülür, her adımda tekrar aranmaz
 };
 
 /* whisper_full ile aynı iş parçacığında çağrılır; JNIEnv geçerlidir. */
@@ -87,11 +88,8 @@ static void on_progress(struct whisper_context *ctx, struct whisper_state *state
 /* Kullanıcı iptal ederse whisper_full erken durur. */
 static bool on_abort(void *user) {
     struct progress_ctx *p = (struct progress_ctx *) user;
-    if (!p || !p->listener) return false;
-    jclass cls = (*p->env)->GetObjectClass(p->env, p->listener);
-    jmethodID m = (*p->env)->GetMethodID(p->env, cls, "isCancelled", "()Z");
-    (*p->env)->DeleteLocalRef(p->env, cls);
-    return m && (*p->env)->CallBooleanMethod(p->env, p->listener, m);
+    if (!p || !p->listener || !p->cancelled) return false;
+    return (*p->env)->CallBooleanMethod(p->env, p->listener, p->cancelled);
 }
 
 /*
@@ -101,11 +99,13 @@ static bool on_abort(void *user) {
  *   LANG\t<dil kodu>
  *   <t0_ms>\t<t1_ms>\t<metin>
  * Hata olursa "ERR\t<kod>" döner.
- * audioCtx > 0 ise kodlayıcı penceresi kısaltılır (kısa seslerde 2-4x hız).
+ * beamSize > 1 ise beam search (daha doğru, daha yavaş), aksi halde greedy.
+ * vadPath NULL değilse Silero VAD ile sessizlik/müzik atlanır (halüsinasyonu azaltır);
+ * zaman damgaları orijinal ses zamanına geri eşlenir.
  */
 JNIEXPORT jbyteArray JNICALL
 JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pcm,
-                         jstring lang, jint threads, jint audioCtx, jobject listener) {
+                         jstring lang, jint threads, jint beamSize, jstring vadPath, jobject listener) {
     (void) thiz;
     struct whisper_context *ctx = (struct whisper_context *) (intptr_t) ctxPtr;
     if (!ctx) return to_bytes(env, "ERR\tno_context");
@@ -114,15 +114,20 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
     jsize n = (*env)->GetArrayLength(env, pcm);
     jfloat *samples = (*env)->GetFloatArrayElements(env, pcm, NULL);
 
-    struct progress_ctx pctx = { env, listener, NULL };
+    const char *vad = vadPath ? (*env)->GetStringUTFChars(env, vadPath, NULL) : NULL;
+
+    struct progress_ctx pctx = { env, listener, NULL, NULL };
     if (listener) {
         jclass cls = (*env)->GetObjectClass(env, listener);
         pctx.method = (*env)->GetMethodID(env, cls, "onProgress", "(I)V");
+        pctx.cancelled = (*env)->GetMethodID(env, cls, "isCancelled", "()Z");
         (*env)->DeleteLocalRef(env, cls);
-        if (!pctx.method) { (*env)->ExceptionClear(env); pctx.listener = NULL; }
+        if (!pctx.method || !pctx.cancelled) { (*env)->ExceptionClear(env); pctx.listener = NULL; }
     }
 
-    struct whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    struct whisper_full_params p = whisper_full_default_params(
+        beamSize > 1 ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
+    if (beamSize > 1) p.beam_search.beam_size = beamSize;
     p.print_realtime = false;
     p.print_progress = false;
     p.print_timestamps = false;
@@ -133,8 +138,12 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
     p.n_threads = threads;
     p.language = language;               // "auto" => otomatik algılama
     p.detect_language = false;
-    p.audio_ctx = audioCtx;
     p.suppress_blank = true;
+    if (vad) {
+        p.vad = true;
+        p.vad_model_path = vad;
+        p.vad_params = whisper_vad_default_params();
+    }
     p.suppress_nst = true;               // [Müzik], (gülüşmeler) gibi etiketleri bastır
     if (pctx.listener) {
         p.progress_callback = on_progress;
@@ -145,6 +154,7 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
 
     int rc = whisper_full(ctx, p, samples, n);
     (*env)->ReleaseFloatArrayElements(env, pcm, samples, JNI_ABORT);
+    if (vad) (*env)->ReleaseStringUTFChars(env, vadPath, vad);
 
     if (rc != 0) {
         (*env)->ReleaseStringUTFChars(env, lang, language);

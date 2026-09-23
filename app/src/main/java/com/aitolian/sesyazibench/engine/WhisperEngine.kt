@@ -13,7 +13,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * whisper.cpp motoru. Model bağlamı önbellekte tutulur (her dökümde yeniden
  * yüklenmez); aynı anda tek döküm çalışır.
  */
-class WhisperEngine(private val context: Context, private val model: WhisperModel) : TranscriptionEngine {
+class WhisperEngine(
+    private val context: Context,
+    private val model: WhisperModel,
+    private val beamSize: Int = 1,
+) : TranscriptionEngine {
     override val name = "whisper.cpp"
 
     override suspend fun transcribe(audio: DecodedAudio, lang: Lang): EngineResult =
@@ -42,7 +46,9 @@ class WhisperEngine(private val context: Context, private val model: WhisperMode
             }
             val t1 = SystemClock.elapsedRealtime()
             val raw = WhisperNative.nativeTranscribe(
-                ctx, audio.samples, lang.code, threadCount(), audioCtxFor(audio.durationMs), listener,
+                ctx, audio.samples, lang.code, threadCount(), beamSize,
+                ModelStore.vadFile(context).takeIf { ModelStore.vadReady(context) }?.absolutePath,
+                listener,
             ).toString(Charsets.UTF_8)
             val ms = SystemClock.elapsedRealtime() - t1
             if (cancel.get()) return@withLock base.copy(loadMs = loadMs, transcribeMs = ms, error = "İptal edildi")
@@ -53,7 +59,9 @@ class WhisperEngine(private val context: Context, private val model: WhisperMode
             raw.lineSequence().filter { it.isNotBlank() }.forEach { line ->
                 val p = line.split('\t', limit = 3)
                 if (p[0] == "LANG") detected = p.getOrNull(1)
-                else if (p.size == 3 && p[2].isNotBlank()) segs += Segment(p[0].toLong(), p[1].toLong(), p[2].trim())
+                else if (p.size == 3 && p[2].isNotBlank() && !isHallucination(p[2])) {
+                    segs += Segment(p[0].toLong(), p[1].toLong(), p[2].trim())
+                }
             }
             base.copy(
                 detectedLanguage = detected,
@@ -90,13 +98,21 @@ class WhisperEngine(private val context: Context, private val model: WhisperMode
         fun threadCount(): Int = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
 
         /**
-         * Whisper her zaman 30 sn'lik pencere işler. Kısa seslerde pencereyi sesin
-         * boyuna indirmek (1 sn = 50 kare) kodlayıcıyı 2-4 kat hızlandırır.
+         * Whisper'ın sessizlik/müzik üzerinde uydurduğu bilinen kalıplar
+         * (YouTube altyazılarından öğrenilmiş). Tam eşleşirse satır atılır.
          */
-        fun audioCtxFor(durationMs: Long): Int {
-            if (durationMs >= 29_000) return 0
-            val frames = (durationMs / 20).toInt() + 64
-            return ((frames + 63) / 64 * 64).coerceIn(256, 1500)
+        private val HALLUCINATIONS = listOf(
+            "altyazı m.k.", "altyazı m.k", "izlediğiniz için teşekkürler", "izlediğiniz için teşekkür ederim",
+            "abone olmayı unutmayın", "videoyu beğenmeyi unutmayın", "thank you for watching",
+            "thanks for watching", "subtitles by the amara.org community", "please subscribe",
+            "untertitel im auftrag des zdf", "sous-titres réalisés par la communauté d'amara.org",
+            "[müzik]", "[music]", "(müzik)", "(music)", "♪", "...",
+        )
+
+        fun isHallucination(text: String): Boolean {
+            val t = text.trim().lowercase().trimEnd('.', '!', ' ')
+            if (t.isEmpty()) return true
+            return HALLUCINATIONS.any { h -> t == h.trimEnd('.', '!', ' ') }
         }
     }
 }
