@@ -37,13 +37,14 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Kalite seviyeleri. beam > 1 → beam search (daha doğru, ~1,5-2x yavaş).
- * Türkçe için base zayıf kalıyor; varsayılan Dengeli (small).
+ * Kalite seviyeleri. Hepsi greedy (beam=1): gerçek cihaz testinde beam search +
+ * sıcaklık yedeklemesi small modeli 36 sn ses için ~6 dk'ya çıkardı; doğruluk
+ * kazancı bu maliyeti karşılamıyor.
  */
 enum class Quality(val label: String, val model: WhisperModel, val beam: Int) {
     FAST("Hızlı", WhisperModel.BASE, 1),
-    BALANCED("Dengeli", WhisperModel.SMALL, 3),
-    BEST("En iyi", WhisperModel.TURBO, 3),
+    BALANCED("Dengeli", WhisperModel.SMALL, 1),
+    BEST("En iyi", WhisperModel.TURBO, 1),
 }
 
 sealed interface Phase {

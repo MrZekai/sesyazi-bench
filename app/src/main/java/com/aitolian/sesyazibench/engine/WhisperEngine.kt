@@ -101,8 +101,27 @@ class WhisperEngine(
             return cachedCtx
         }
 
-        /** Büyük çekirdek sayısı genelde 4'ü geçmez; fazlası küçük çekirdeklerde yavaşlatır. */
-        fun threadCount(): Int = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+        /**
+         * Yalnızca performans çekirdekleri: küçük (verimlilik) çekirdeklere iş
+         * verilirse whisper en yavaş çekirdeği bekler ve toplam süre uzar.
+         * Çekirdeklerin en yüksek frekansı, en hızlı çekirdeğin %85.inden
+         * yüksekse "büyük" sayılır.
+         */
+        fun threadCount(): Int = bigCores
+
+        private val bigCores: Int by lazy {
+            val n = Runtime.getRuntime().availableProcessors()
+            val freqs = (0 until n).mapNotNull { i ->
+                runCatching {
+                    java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_max_freq").readText().trim().toLong()
+                }.getOrNull()
+            }
+            val big = if (freqs.size == n && freqs.isNotEmpty()) {
+                val top = freqs.max()
+                freqs.count { it >= top * 0.85 }
+            } else n / 2
+            big.coerceIn(2, 6)
+        }
 
         /**
          * Whisper'ın sessizlik/müzik üzerinde uydurduğu bilinen kalıplar
