@@ -51,7 +51,7 @@ enum class Quality(val label: String, val model: WhisperModel, val beam: Int) {
 sealed interface Phase {
     data object Idle : Phase
     data class Preparing(val message: String) : Phase
-    data class Downloading(val progress: Float) : Phase
+    data class Downloading(val progress: Float, val mb: Int = 0) : Phase
     data class Transcribing(val percent: Int) : Phase
     data class Failed(val message: String) : Phase
 }
@@ -90,6 +90,10 @@ data class MainState(
     val adRequest: Int = 0,
     /** Ayarlar ekranındaki model indirmeleri (0..1). */
     val modelDownloads: Map<WhisperModel, Float> = emptyMap(),
+    /** Son silinen geçmiş kaydı — "Geri al" için birkaç saniye tutulur. */
+    val undoDeleted: Transcript? = null,
+    /** Tam ekran okuma yazı boyutu (sp). */
+    val readerFont: Int = 19,
 )
 
 /** Çeviri hedefi: telefonun dili; kaynak zaten o dilse İngilizce (kaynak İngilizceyse Türkçe). */
@@ -122,7 +126,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ?: if (WhisperEngine.threadCount() <= 2) Quality.FAST else Quality.BALANCED
         val l = prefs.defaultLang?.let { langOf(it) } ?: Lang.AUTO
         val target = prefs.translateTarget?.let { langOf(it) }
-        _state.update { it.copy(quality = q, lang = l, translationTarget = target ?: it.translationTarget) }
+        _state.update {
+            it.copy(quality = q, lang = l, translationTarget = target ?: it.translationTarget, readerFont = prefs.readerFont)
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val h = HistoryStore.load(ctx)
             _state.update { it.copy(history = h) }
@@ -175,6 +181,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val name = withContext(Dispatchers.IO) { displayName(uri) }
                 val copy = withContext(Dispatchers.IO) { copyToCache(uri, name) }
+                    ?: throw DecodeException("Dosya çok büyük (en fazla ${MAX_FILE_MB} MB)")
                 val decoded = withContext(Dispatchers.IO) { AudioDecoder.decode(ctx, Uri.fromFile(copy)) }
                 if (decoded.samples.isEmpty()) error("Seste okunabilir içerik yok")
                 audio = decoded
@@ -198,13 +205,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Dil veya kalite değişince aynı sesi yeniden dökmek için. */
     fun retranscribe() {
-        if (work?.isActive == true) return
+        val prev = work
+        if (prev?.isActive == true) {
+            // İyileştirme turu sürerken dil/kalite değişirse: turu iptal et, yeni ayarla baştan
+            if (state.value.refining != null) cancelWork() else return
+        }
         if (audio == null) {
             if (state.value.result != null) toast("Yeni ayar bir sonraki seste geçerli olacak")
             return
         }
-        work = viewModelScope.launch { transcribeCurrent() }
+        work = viewModelScope.launch { prev?.join(); transcribeCurrent() }
     }
+
+    /** Hata ekranındaki "Tekrar dene": ses elimizdeyse aynı sesi yeniden döker. */
+    fun canRetry() = audio != null
 
     private suspend fun ensureModel(model: WhisperModel, onProgress: (Float) -> Unit): Boolean {
         if (!vadTried && !ModelStore.vadReady(ctx) && ModelStore.isReady(ctx, model)) {
@@ -234,7 +248,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             onSegment = { seg -> if (stream) _state.update { it.copy(live = it.live + seg) } },
         )
         if (r.error == null) SpeedStore.record(ctx, model, r.transcribeMs, a.durationMs)
-        withContext(Dispatchers.IO) { ResultLog.append(ctx, state.value.fileName ?: "?", r) }
+        // Test günlüğü (metin içerir) yalnızca geliştirici modunda tutulur
+        if (prefs.devMode) withContext(Dispatchers.IO) { ResultLog.append(ctx, state.value.fileName ?: "?", r) }
         return r
     }
 
@@ -242,13 +257,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val a = audio ?: return
         val s = state.value
         val best = s.quality == Quality.BEST
-        // En iyi modda önce hızlı önizleme (base), sonra arka planda turbo ile iyileştirme
-        val first = if (best) Quality.FAST else s.quality
+        // En iyi modda önce önizleme, sonra arka planda turbo ile iyileştirme.
+        // Dengeli modeli zaten inmişse önizleme onunla (Hızlı'dan belirgin daha doğru).
+        val first = when {
+            !best -> s.quality
+            ModelStore.isReady(ctx, Quality.BALANCED.model) -> Quality.BALANCED
+            else -> Quality.FAST
+        }
 
         if (!ModelStore.isReady(ctx, first.model)) {
             warnIfMetered(first.model)
-            _state.update { it.copy(phase = Phase.Downloading(0f)) }
-            if (!ensureModel(first.model) { p -> _state.update { it.copy(phase = Phase.Downloading(p)) } }) {
+            val mb = first.model.approxMb
+            _state.update { it.copy(phase = Phase.Downloading(0f, mb)) }
+            if (!ensureModel(first.model) { p -> _state.update { it.copy(phase = Phase.Downloading(p, mb)) } }) {
                 _state.update { it.copy(phase = Phase.Failed("Model indirilemedi. İnterneti kontrol et.")) }
                 return
             }
@@ -270,6 +291,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         if (r.segments.isEmpty()) {
+            cancel.set(false)
             _state.update {
                 it.copy(
                     phase = Phase.Failed("Konuşma algılanamadı. Seste net konuşma yoksa (ör. müzik) metin çıkmaz."),
@@ -285,7 +307,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             durationMs = a.durationMs,
             language = detected,
             processMs = r.transcribeMs,
-            segments = r.segments,
+            segments = dedupe(r.segments),
         )
         var h = withContext(Dispatchers.IO) { HistoryStore.add(ctx, t) }
         Ads.onTranscriptionDone()
@@ -293,7 +315,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 phase = Phase.Idle, result = t, history = h, live = emptyList(), etaSec = null,
                 translation = null, translating = null, translationTarget = targetFor(t.language),
-                refining = if (best) "✨ En iyi model hazırlanıyor…" else null,
+                refining = if (best) "✨ Önizleme (${first.label}) · En iyi sonuç hazırlanıyor…" else null,
                 suggestBest = !best && detected == Lang.TR.code,
             )
         }
@@ -304,6 +326,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         // --- İyileştirme turu (En iyi) ---
+        if (!ModelStore.isReady(ctx, Quality.BEST.model)) warnIfMetered(Quality.BEST.model)
         val ok = ensureModel(Quality.BEST.model) { p ->
             _state.update { it.copy(refining = "✨ En iyi model indiriliyor… %${(p * 100).toInt()}") }
         }
@@ -322,7 +345,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             Notifier.notifyDone(ctx, t.text.take(120))
             return
         }
-        t = t.copy(segments = r2.segments, processMs = r.transcribeMs + r2.transcribeMs)
+        t = t.copy(segments = dedupe(r2.segments), processMs = r.transcribeMs + r2.transcribeMs)
         h = withContext(Dispatchers.IO) { HistoryStore.add(ctx, t) }
         _state.update {
             if (it.result?.id == t.id) it.copy(result = t, history = h, refining = null, translation = null, toast = "✨ Metin iyileştirildi")
@@ -346,15 +369,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteHistory(t: Transcript) {
         viewModelScope.launch {
             val h = withContext(Dispatchers.IO) { HistoryStore.remove(ctx, t.id) }
-            _state.update { it.copy(history = h, toast = "Silindi") }
+            _state.update { it.copy(history = h, undoDeleted = t) }
         }
     }
 
+    fun undoDelete() {
+        val t = state.value.undoDeleted ?: return
+        viewModelScope.launch {
+            val h = withContext(Dispatchers.IO) { HistoryStore.restore(ctx, t) }
+            _state.update { it.copy(history = h, undoDeleted = null) }
+        }
+    }
+
+    fun undoExpired() = _state.update { it.copy(undoDeleted = null) }
+
+    /** Geçmiş + dışa aktarılan SRT'ler + test günlüğü + önbellekteki ses kopyası silinir. */
     fun clearHistory() {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { HistoryStore.clear(ctx) }
-            _state.update { it.copy(history = emptyList(), toast = "Geçmiş temizlendi") }
+            withContext(Dispatchers.IO) {
+                HistoryStore.clear(ctx)
+                File(ctx.filesDir, "results").deleteRecursively()
+                ctx.cacheDir.listFiles()?.filter { it.name.startsWith("current_audio") }?.forEach { it.delete() }
+            }
+            _state.update { it.copy(history = emptyList(), undoDeleted = null, toast = "Geçmiş ve dosyalar temizlendi") }
         }
+    }
+
+    fun setReaderFont(sp: Int) {
+        val v = sp.coerceIn(14, 30)
+        prefs.readerFont = v
+        _state.update { it.copy(readerFont = v) }
     }
 
     /** Kayıtlı hedef dil kaynakla aynı değilse onu kullan, değilse akıllı varsayılan. */
@@ -489,15 +533,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (r.error != null) "${r.engine} ${r.variant}: HATA — ${r.error}"
         else "${r.engine} ${r.variant}: ${"%.1f".format(r.transcribeMs / 1000.0)} sn (RTF ${"%.2f".format(r.rtf)}) — ${r.text.take(80)}"
 
-    private fun copyToCache(uri: Uri, name: String): File {
-        val ext = name.substringAfterLast('.', "bin").take(5)
+    /** Önbelleğe kopyalar; [MAX_FILE_MB] aşılırsa kopyayı siler ve null döner. */
+    private fun copyToCache(uri: Uri, name: String): File? {
+        val ext = name.substringAfterLast('.', "bin").filter { it.isLetterOrDigit() }.take(5).ifEmpty { "bin" }
+        ctx.cacheDir.listFiles()?.filter { it.name.startsWith("current_audio") }?.forEach { it.delete() }
         val out = File(ctx.cacheDir, "current_audio.$ext")
+        val limit = MAX_FILE_MB * 1024L * 1024L
         ctx.contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "Dosya okunamadı" }
-            out.outputStream().use { input.copyTo(it) }
+            out.outputStream().use { o ->
+                val buf = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    total += n
+                    if (total > limit) { o.close(); out.delete(); return null }
+                    o.write(buf, 0, n)
+                }
+            }
         }
         return out
     }
+
+    /** Art arda aynı cümleyi (modelin takılması) tek satıra indirir. */
+    private fun dedupe(segs: List<Segment>): List<Segment> =
+        segs.filterIndexed { i, seg -> i == 0 || !seg.text.equals(segs[i - 1].text, ignoreCase = true) }
+
+    private companion object { const val MAX_FILE_MB = 500 }
 
     private fun displayName(uri: Uri): String =
         ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->

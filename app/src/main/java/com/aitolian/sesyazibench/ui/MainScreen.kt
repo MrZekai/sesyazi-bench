@@ -99,6 +99,7 @@ fun MainScreen(
     val adsReady by Ads.ready.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showSettings by remember { mutableStateOf(false) }
+    var reading by rememberSaveable { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(vm::onAudio)
     }
@@ -124,19 +125,29 @@ fun MainScreen(
         SettingsScreen(vm, s, onBack = { showSettings = false })
         return
     }
+    if (reading && s.result != null) {
+        ReaderScreen(s, vm, onClose = { reading = false })
+        return
+    }
+    val canGoHome = !busy && (s.result != null || s.phase is Phase.Failed)
+    val goHome = { vm.clearForNew() }
     // Geri tuşu: sonuç/hata ekranından uygulamayı kapatmak yerine başlangıca dön
-    BackHandler(enabled = !busy && (s.result != null || s.phase is Phase.Failed)) { vm.clearForNew() }
+    BackHandler(enabled = canGoHome) { goHome() }
 
     Column(Modifier.fillMaxSize().background(SY.Bg).background(SY.background)) {
         Column(Modifier.statusBarsPadding().weight(1f)) {
-            TopBar(onSettings = { showSettings = true })
-            Hero(s, busy, onPick = openWhatsApp, onCancel = vm::cancelWork)
+            TopBar(onHome = if (canGoHome) goHome else null, onSettings = { showSettings = true })
+            Hero(
+                s, busy, onPick = openWhatsApp, onCancel = vm::cancelWork,
+                onRetry = { if (vm.canRetry()) vm.retranscribe() else openWhatsApp() },
+            )
             Controls(s, busy, vm)
             Spacer(Modifier.height(14.dp))
             ResultSheet(
                 s, vm, Modifier.weight(1f),
                 onNew = { if (!busy) onNewAudio { vm.clearForNew() } },
                 picker = { ShareGuide(onOpenWhatsApp = openWhatsApp, onOtherFile = pickOtherFile) },
+                onRead = { reading = true },
             )
         }
         // Altta sabit banner — içerikle asla çakışmaz
@@ -147,11 +158,19 @@ fun MainScreen(
 }
 
 @Composable
-private fun TopBar(onSettings: () -> Unit) {
+private fun TopBar(onHome: (() -> Unit)?, onSettings: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(start = if (onHome != null) 8.dp else 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Sonuç/hata ekranındayken başlangıca (boş ana sayfa) dönüş
+        if (onHome != null) {
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).background(SY.Card).clickable(onClick = onHome),
+                contentAlignment = Alignment.Center,
+            ) { Text("⌂", fontSize = 20.sp, color = SY.Text) }
+            Spacer(Modifier.width(10.dp))
+        }
         Text(stringResource(R.string.app_name), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = SY.Text, modifier = Modifier.weight(1f))
         Box(
             Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onSettings),
@@ -161,7 +180,7 @@ private fun TopBar(onSettings: () -> Unit) {
 }
 
 @Composable
-private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -> Unit) {
+private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -> Unit, onRetry: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(128.dp), contentAlignment = Alignment.Center) {
             when (val p = s.phase) {
@@ -176,7 +195,7 @@ private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -
         Spacer(Modifier.height(10.dp))
         val (title, sub) = when (val p = s.phase) {
             is Phase.Preparing -> p.message to "Ses telefonundan çıkmaz"
-            is Phase.Downloading -> "Model indiriliyor…" to "Tek seferlik · ${s.quality.model.approxMb} MB"
+            is Phase.Downloading -> "Model indiriliyor…" to "Tek seferlik · ${p.mb} MB"
             is Phase.Transcribing -> "Yazıya dökülüyor…" to
                 (s.etaSec?.let { "Tahmini ~$it sn · " } ?: "") + "internet gerekmez, ses telefondan çıkmaz"
             is Phase.Failed -> "Bir sorun oldu" to p.message
@@ -192,7 +211,7 @@ private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -
             Pill("İptal", bg = SY.Chip, fg = SY.Text, modifier = Modifier.padding(top = 4.dp), onClick = onCancel)
         }
         if (s.phase is Phase.Failed && !busy) {
-            Pill("Tekrar dene", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(top = 4.dp), onClick = onPick)
+            Pill("Tekrar dene", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(top = 4.dp), onClick = onRetry)
         }
     }
 }
@@ -289,6 +308,7 @@ private fun ResultSheet(
     modifier: Modifier,
     onNew: () -> Unit,
     picker: @Composable () -> Unit,
+    onRead: () -> Unit,
 ) {
     val context = LocalContext.current
     val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
@@ -315,7 +335,14 @@ private fun ResultSheet(
             s.refining?.let { RefineBanner(it) }
             Spacer(Modifier.height(12.dp))
             Tabs(s.tab) { t -> if (t == Tab.TRANSLATION) vm.openTranslation() else vm.setTab(t) }
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Tüm metni tam ekranda baştan aşağı okumak için
+                Text(
+                    "⛶ Tam ekran oku", color = SY.OnAccent, fontSize = 12.5.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clip(CircleShape).background(SY.Accent).clickable(onClick = onRead)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+                Spacer(Modifier.weight(1f))
                 Text(
                     if (s.paragraphView) "☰ Satır görünümü" else "¶ Paragraf görünümü",
                     color = SY.Accent, fontSize = 12.5.sp,
@@ -333,7 +360,7 @@ private fun ResultSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Action("⧉", "Kopyala", Modifier.weight(1f)) {
                     if (shown == null) vm.toast("Çeviri henüz hazır değil")
-                    else { copy(context, shown.joinToString(" ") { it.text }); vm.toast("Kopyalandı") }
+                    else { copyText(context, shown.joinToString(" ") { it.text }); vm.toast("Kopyalandı") }
                 }
                 Action("↗", "Paylaş", Modifier.weight(1f)) {
                     if (shown == null) vm.toast("Çeviri henüz hazır değil") else shareText(context, shown.joinToString(" ") { it.text })
@@ -355,6 +382,7 @@ private fun ResultSheet(
             }
             if (s.suggestBest && s.hasAudio) SuggestBestCard(onRun = vm::rerunWithBest)
         }
+        UndoBar(s, vm)
         History(s, vm)
         Spacer(Modifier.height(8.dp))
     }
@@ -538,8 +566,24 @@ private fun TranslationPane(s: MainState, vm: MainViewModel) {
                 onClick = { vm.translate(s.translationTarget) },
             )
         }
+        // Cihaz içi çeviri sınırlı; daha iyi sonuç için Google Çeviri (ücretsiz, internetle)
+        val ctx = LocalContext.current
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).clip(RoundedCornerShape(12.dp))
+                .background(SY.Card).clickable {
+                    val r = s.result ?: return@clickable
+                    openGoogleTranslate(ctx, r.text, r.language, s.translationTarget.code)
+                }.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Daha doğal çeviri: Google Çeviri'de aç", color = SY.Text, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                Text("Ücretsiz · internet gerekir · metin Google'a gider", color = SY.Muted, fontSize = 11.5.sp)
+            }
+            Text("↗", color = SY.Accent, fontSize = 17.sp)
+        }
         Text(
-            "Çeviri cihazda yapılır; her dil paketi yalnızca ilk seferde indirilir.",
+            "Bu sekmedeki çeviri cihazda yapılır; her dil paketi yalnızca ilk seferde indirilir.",
             fontSize = 11.5.sp, color = SY.Muted, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
@@ -554,6 +598,24 @@ private fun Action(icon: String, label: String, modifier: Modifier, onClick: () 
             contentAlignment = Alignment.Center,
         ) { Text(icon, color = SY.Accent, fontSize = 17.sp) }
         Text(label, color = SY.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+    }
+}
+
+/** Geçmişten silinen kayıt için 5 sn'lik "Geri al". */
+@Composable
+private fun UndoBar(s: MainState, vm: MainViewModel) {
+    val d = s.undoDeleted ?: return
+    LaunchedEffect(d.id) { kotlinx.coroutines.delay(5000); vm.undoExpired() }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 12.dp).clip(RoundedCornerShape(12.dp)).background(SY.Card)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Silindi: ${d.preview}", color = SY.Muted, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(
+            "Geri al", color = SY.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = vm::undoDelete).padding(6.dp),
+        )
     }
 }
 
@@ -600,19 +662,21 @@ fun Pill(
 
 private fun langName(code: String) = langOf(code)?.label ?: code
 
-private fun copy(context: Context, text: String) {
+internal fun copyText(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("SesYazı", text))
 }
 
-private fun shareText(context: Context, text: String) {
+internal fun shareText(context: Context, text: String) {
     val i = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
     context.startActivity(Intent.createChooser(i, "Paylaş"))
 }
 
 private fun shareSrt(context: Context, t: Transcript, segments: List<Segment>, suffix: String) {
     val dir = File(context.filesDir, "results").apply { mkdirs() }
-    val base = t.fileName.substringBeforeLast('.').ifBlank { "sesyazi" } + suffix
+    // Dosya adını güvenli karakterlere indir (/, :, * vb. FileProvider'ı çökertiyordu)
+    val safe = t.fileName.substringBeforeLast('.').replace(Regex("[^\\p{L}\\p{N}._ -]"), "_").trim().take(60)
+    val base = safe.ifBlank { "sesyazi" } + suffix
     val view = t.copy(segments = segments)
     val srt = File(dir, "$base.srt").apply { writeText(view.toSrt()) }
     val uri = FileProvider.getUriForFile(context, context.packageName + ".files", srt)

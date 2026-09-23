@@ -64,6 +64,10 @@ object HistoryStore {
 
     fun clear(c: Context) { file(c).delete() }
 
+    /** "Geri al": silinen kaydı zaman sırasındaki yerine geri koyar. */
+    fun restore(c: Context, t: Transcript): List<Transcript> =
+        save(c, (load(c).filter { it.id != t.id } + t).sortedByDescending { it.id }.take(MAX))
+
     fun add(c: Context, t: Transcript): List<Transcript> =
         save(c, (listOf(t) + load(c).filter { it.id != t.id }).take(MAX))
 
@@ -77,7 +81,10 @@ object HistoryStore {
                     .put("language", tr.language).put("processMs", tr.processMs).put("segments", segs),
             )
         }
-        file(c).writeText(arr.toString())
+        // Atomik yazım: yarıda kesilen yazma geçmişi bozmasın
+        val tmp = File(c.filesDir, "history.json.tmp")
+        tmp.writeText(arr.toString())
+        if (!tmp.renameTo(file(c))) { file(c).writeText(arr.toString()); tmp.delete() }
         return list
     }
 }

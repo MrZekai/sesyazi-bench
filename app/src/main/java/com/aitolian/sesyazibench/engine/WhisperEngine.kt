@@ -147,6 +147,9 @@ class WhisperEngine(
             "abone olmayı unutmayın", "videoyu beğenmeyi unutmayın", "thank you for watching",
             "thanks for watching", "subtitles by the amara.org community", "please subscribe",
             "untertitel im auftrag des zdf", "sous-titres réalisés par la communauté d'amara.org",
+            // Türkçe başlangıç ipucunun (initial_prompt) metne sızması
+            "merhaba, nasılsın? yarın saat onda görüşelim. çok teşekkür ederim, iyi günler",
+            "yarın saat onda görüşelim. çok teşekkür ederim, iyi günler",
             "[müzik]", "[music]", "(müzik)", "(music)", "♪", "...",
         )
 

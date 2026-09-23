@@ -23,6 +23,10 @@ class Prefs(context: Context) {
         get() = p.getBoolean("notify", true)
         set(v) = p.edit().putBoolean("notify", v).apply()
 
+    var readerFont: Int
+        get() = p.getInt("reader_font", 19)
+        set(v) = p.edit().putInt("reader_font", v).apply()
+
     var devMode: Boolean
         get() = p.getBoolean("dev", false)
         set(v) = p.edit().putBoolean("dev", v).apply()
