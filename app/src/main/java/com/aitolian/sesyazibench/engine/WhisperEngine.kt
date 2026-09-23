@@ -23,11 +23,13 @@ class WhisperEngine(
     override suspend fun transcribe(audio: DecodedAudio, lang: Lang): EngineResult =
         transcribe(audio, lang, onProgress = {}, cancel = AtomicBoolean(false))
 
+    /** @param onSegment cümleler çözüldükçe anında çağrılır (canlı metin akışı) */
     suspend fun transcribe(
         audio: DecodedAudio,
         lang: Lang,
         onProgress: (Int) -> Unit,
         cancel: AtomicBoolean,
+        onSegment: (Segment) -> Unit = {},
     ): EngineResult = withContext(Dispatchers.Default) {
         lock.withLock {
             val base = EngineResult(name, model.label, lang.code, null, audio.durationMs, 0, 0, "")
@@ -40,9 +42,14 @@ class WhisperEngine(
             if (ctx == 0L) return@withLock base.copy(loadMs = loadMs, error = "Model yüklenemedi (bellek yetersiz olabilir)")
 
             val report = onProgress
+            val emit = onSegment
             val listener = object : ProgressListener {
                 override fun onProgress(percent: Int) = report(percent)
                 override fun isCancelled(): Boolean = cancel.get()
+                override fun onSegment(startMs: Long, endMs: Long, text: ByteArray) {
+                    val t = text.toString(Charsets.UTF_8)
+                    if (t.isNotBlank() && !isHallucination(t)) emit(Segment(startMs, endMs, t.trim()))
+                }
             }
             val t1 = SystemClock.elapsedRealtime()
             val raw = WhisperNative.nativeTranscribe(

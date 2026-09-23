@@ -4,6 +4,8 @@ package com.aitolian.sesyazibench.engine
 interface ProgressListener {
     fun onProgress(percent: Int)
     fun isCancelled(): Boolean
+    /** Yeni çözülen cümle (UTF-8 bayt; bölünmüş karakterler Kotlin'de güvenle çözülür). */
+    fun onSegment(startMs: Long, endMs: Long, text: ByteArray)
 }
 
 /** libsesyazi.so JNI köprüsü (bkz. app/src/main/cpp/sesyazi_jni.c). */

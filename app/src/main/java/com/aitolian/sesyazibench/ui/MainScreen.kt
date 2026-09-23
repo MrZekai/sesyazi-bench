@@ -36,7 +36,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -81,13 +83,22 @@ private val AUDIO_TYPES = arrayOf("audio/*", "video/*", "application/ogg")
  * [onNewAudio]: "+ Yeni ses" — geçiş reklamı (sınırlıysa atlanır) sonra verilen işi çalıştırır.
  */
 @Composable
-fun MainScreen(vm: MainViewModel, onNewAudio: (then: () -> Unit) -> Unit) {
+fun MainScreen(
+    vm: MainViewModel,
+    onNewAudio: (then: () -> Unit) -> Unit,
+    onProcessingAd: () -> Unit,
+) {
     val s by vm.state.collectAsStateWithLifecycle()
     val adsReady by Ads.ready.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showSettings by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(vm::onAudio)
+    }
+    // Uzun sürecek dökümde bekleme süresine geçiş reklamı (sınırlar Ads içinde)
+    var handledAd by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(s.adRequest) {
+        if (s.adRequest > handledAd) { handledAd = s.adRequest; onProcessingAd() } // döndürmede tekrar gösterme
     }
     LaunchedEffect(s.toast) {
         s.toast?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); vm.toastShown() }
@@ -145,7 +156,8 @@ private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -
         val (title, sub) = when (val p = s.phase) {
             is Phase.Preparing -> p.message to "Ses telefonundan çıkmaz"
             is Phase.Downloading -> "Model indiriliyor…" to "Tek seferlik · ${s.quality.model.approxMb} MB"
-            is Phase.Transcribing -> "Yazıya dökülüyor…" to "İnternet gerekmez · ses telefonundan çıkmaz"
+            is Phase.Transcribing -> "Yazıya dökülüyor…" to
+                (s.etaSec?.let { "Tahmini ~$it sn · " } ?: "") + "internet gerekmez, ses telefondan çıkmaz"
             is Phase.Failed -> "Bir sorun oldu" to p.message
             Phase.Idle -> "Ses dosyası seç" to "veya sesli mesaja uzun bas → Paylaş → SesYazı"
         }
@@ -267,10 +279,13 @@ private fun ResultSheet(s: MainState, vm: MainViewModel, modifier: Modifier, onN
         )
         Spacer(Modifier.height(12.dp))
         val r = s.result
-        if (r == null) {
+        if (r == null && s.live.isNotEmpty()) {
+            LivePane(s)
+        } else if (r == null) {
             EmptyState(s)
         } else {
             PlayerRow(s, vm)
+            s.refining?.let { RefineBanner(it) }
             Spacer(Modifier.height(12.dp))
             Tabs(s.tab) { t -> if (t == Tab.TRANSLATION) vm.openTranslation() else vm.setTab(t) }
             Spacer(Modifier.height(8.dp))
@@ -305,9 +320,58 @@ private fun ResultSheet(s: MainState, vm: MainViewModel, modifier: Modifier, onN
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onNew).padding(6.dp),
                 )
             }
+            if (s.suggestBest && s.hasAudio) SuggestBestCard(onRun = vm::rerunWithBest)
         }
         History(s, vm)
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun LivePane(s: MainState) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(SY.A2))
+            Text("Canlı · metin geldikçe yazılıyor", fontSize = 12.sp, color = SY.Muted, modifier = Modifier.padding(start = 8.dp))
+        }
+        s.live.forEach { seg ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp)) {
+                Text(
+                    Transcript.clock(seg.startMs), fontSize = 12.sp, color = SY.Accent, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.width(44.dp).padding(top = 3.dp),
+                )
+                Text(seg.text, fontSize = 16.sp, lineHeight = 22.sp, color = SY.Text, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RefineBanner(text: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(12.dp))
+            .background(Brush.horizontalGradient(listOf(SY.A1.copy(alpha = .25f), SY.A2.copy(alpha = .18f))))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircularProgressIndicator(Modifier.size(16.dp), color = SY.Accent, strokeWidth = 2.dp)
+        Text(text, fontSize = 12.5.sp, color = SY.Text, modifier = Modifier.padding(start = 10.dp))
+    }
+}
+
+@Composable
+private fun SuggestBestCard(onRun: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(14.dp))
+            .border(1.dp, SY.Accent.copy(alpha = .35f), RoundedCornerShape(14.dp))
+            .background(SY.Card).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Türkçe için daha doğru sonuç", fontSize = 13.5.sp, color = SY.Text, fontWeight = FontWeight.Medium)
+            Text("\"En iyi\" mod önce hızlı metni gösterir, sonra arka planda iyileştirir.", fontSize = 12.sp, color = SY.Muted)
+        }
+        Pill("En iyi ile dene", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(start = 8.dp), onClick = onRun)
     }
 }
 

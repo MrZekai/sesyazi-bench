@@ -76,7 +76,27 @@ struct progress_ctx {
     jobject listener;
     jmethodID method;       // onProgress(I)V
     jmethodID cancelled;    // isCancelled()Z — bir kez çözülür, her adımda tekrar aranmaz
+    jmethodID segment;      // onSegment(JJ[B)V — canlı metin akışı
 };
+
+/* Yeni cümle(ler) çözüldükçe Kotlin'e anında gönder (metin ekrana akar). */
+static void on_new_segment(struct whisper_context *ctx, struct whisper_state *state, int n_new, void *user) {
+    (void) ctx;
+    struct progress_ctx *p = (struct progress_ctx *) user;
+    if (!p || !p->listener || !p->segment) return;
+    int n = whisper_full_n_segments_from_state(state);
+    for (int i = n - n_new; i < n; i++) {
+        if (i < 0) continue;
+        const char *text = whisper_full_get_segment_text_from_state(state, i);
+        jlong t0 = (jlong) whisper_full_get_segment_t0_from_state(state, i) * 10;
+        jlong t1 = (jlong) whisper_full_get_segment_t1_from_state(state, i) * 10;
+        jsize len = (jsize) strlen(text);
+        jbyteArray arr = (*p->env)->NewByteArray(p->env, len);
+        (*p->env)->SetByteArrayRegion(p->env, arr, 0, len, (const jbyte *) text);
+        (*p->env)->CallVoidMethod(p->env, p->listener, p->segment, t0, t1, arr);
+        (*p->env)->DeleteLocalRef(p->env, arr);
+    }
+}
 
 /* whisper_full ile aynı iş parçacığında çağrılır; JNIEnv geçerlidir. */
 static void on_progress(struct whisper_context *ctx, struct whisper_state *state, int progress, void *user) {
@@ -143,11 +163,13 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
 
     const char *vad = vadPath ? (*env)->GetStringUTFChars(env, vadPath, NULL) : NULL;
 
-    struct progress_ctx pctx = { env, listener, NULL, NULL };
+    struct progress_ctx pctx = { env, listener, NULL, NULL, NULL };
     if (listener) {
         jclass cls = (*env)->GetObjectClass(env, listener);
         pctx.method = (*env)->GetMethodID(env, cls, "onProgress", "(I)V");
         pctx.cancelled = (*env)->GetMethodID(env, cls, "isCancelled", "()Z");
+        pctx.segment = (*env)->GetMethodID(env, cls, "onSegment", "(JJ[B)V");
+        if (!pctx.segment) (*env)->ExceptionClear(env);
         (*env)->DeleteLocalRef(env, cls);
         if (!pctx.method || !pctx.cancelled) { (*env)->ExceptionClear(env); pctx.listener = NULL; }
     }
@@ -165,6 +187,10 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
     p.n_threads = threads;
     // "auto" => yalnızca desteklenen diller arasından algıla
     p.language = strcmp(language, "auto") == 0 ? detect_allowed_language(ctx, samples, n, threads) : language;
+    // Türkçe ipucu: noktalama, büyük harf ve Türkçe karakter kullanımını modele gösterir
+    if (strcmp(p.language, "tr") == 0) {
+        p.initial_prompt = "Merhaba, nasılsın? Yarın saat onda görüşelim. Çok teşekkür ederim, iyi günler.";
+    }
     p.detect_language = false;
     p.suppress_blank = true;
     if (vad) {
@@ -178,6 +204,8 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
         p.progress_callback_user_data = &pctx;
         p.abort_callback = on_abort;
         p.abort_callback_user_data = &pctx;
+        p.new_segment_callback = on_new_segment;
+        p.new_segment_callback_user_data = &pctx;
     }
 
     int rc = whisper_full(ctx, p, samples, n);

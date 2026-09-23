@@ -1,6 +1,8 @@
 package com.aitolian.sesyazibench
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -24,11 +26,37 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         Ads.start(this)
+        askNotificationPermissionOnce()
         if (savedInstanceState == null) handleShare(intent)
         setContent {
             SesYaziTheme {
-                MainScreen(vm, onNewAudio = { then -> Ads.maybeShowInterstitial(this, then) })
+                MainScreen(
+                    vm,
+                    onNewAudio = { then -> Ads.maybeShowInterstitial(this, then) },
+                    onProcessingAd = { Ads.maybeShowInterstitial(this) {} },
+                )
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        Notifier.appVisible = true
+    }
+
+    override fun onStop() {
+        Notifier.appVisible = false
+        super.onStop()
+    }
+
+    /** Uzun dökümler arka planda bittiğinde haber verebilmek için (Android 13+), bir kez sorulur. */
+    private fun askNotificationPermissionOnce() {
+        if (Build.VERSION.SDK_INT < 33) return
+        val prefs = getSharedPreferences("app", MODE_PRIVATE)
+        if (prefs.getBoolean("asked_notif", false)) return
+        prefs.edit().putBoolean("asked_notif", true).apply()
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7)
         }
     }
 
