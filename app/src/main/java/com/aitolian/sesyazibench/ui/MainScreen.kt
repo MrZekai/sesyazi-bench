@@ -376,7 +376,7 @@ private fun LivePane(s: MainState) {
                 Text(seg.text, fontSize = 16.sp, lineHeight = 22.sp, color = SY.Text, modifier = Modifier.weight(1f))
             }
         }
-    } }
+    }
 }
 
 @Composable
