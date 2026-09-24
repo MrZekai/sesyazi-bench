@@ -17,12 +17,17 @@ data class Transcript(
     val fileName: String,
     val durationMs: Long,
     val language: String,
+    /** Gösterilen metni üreten son STT turunun süresi (ms). */
     val processMs: Long,
     val segments: List<Segment>,
     /** Kullanıcının not ekranında düzelttiği metin (varsa ham dökümün yerine gösterilir). */
     val editedText: String? = null,
     /** Her kullanıcı düzenlemesinde artar; arka plan işleri eski sürümün üzerine yazmasın diye. */
     val revision: Int = 0,
+    /** En iyi ile iyileştirildiyse önceki (ön izleme) turunun STT süresi (ms); yoksa 0. */
+    val previewMs: Long = 0,
+    /** Metni üreten kalite (Quality.name); eski kayıtlarda boş. */
+    val quality: String? = null,
 ) {
     val rawText: String get() = segments.joinToString(" ") { it.text }
     val text: String get() = editedText ?: rawText
@@ -141,7 +146,8 @@ object HistoryStore {
             arr.put(
                 JSONObject().put("id", tr.id).put("fileName", tr.fileName).put("durationMs", tr.durationMs)
                     .put("language", tr.language).put("processMs", tr.processMs).put("segments", segs)
-                    .put("rev", tr.revision)
+                    .put("rev", tr.revision).put("pms", tr.previewMs)
+                    .apply { tr.quality?.let { put("q", it) } }
                     .apply { tr.editedText?.let { put("edited", it) } },
             )
         }
@@ -165,6 +171,8 @@ object HistoryStore {
                 },
                 editedText = o.optString("edited").ifEmpty { null },
                 revision = o.optInt("rev", 0),
+                previewMs = o.optLong("pms", 0),
+                quality = o.optString("q").ifEmpty { null },
             )
         }
     }

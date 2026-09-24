@@ -152,10 +152,10 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                 else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
                     if (showTimes && r.editedText == null) TimedText(r.segments, s, vm, font)
                     else PaperText(r.editedText?.let { listOf(it) } ?: paragraphList, font)
-                    if (s.suggestBest && s.hasAudio && !working) SuggestBest(onRun = vm::rerunWithBest)
+                    if (s.suggestBest && s.hasAudio && !working && s.refining == null) SuggestBest(onRun = vm::refineWithBest)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "✓ ${"%.1f".format(Locale("tr"), r.processMs / 1000.0)} sn'de cihazda yazıya döküldü" +
+                        processLine(r) +
                             (if (r.editedText != null) " · düzenlendi" else "") +
                             (if (showTimes && r.editedText != null) " · zamanlı görünüm düzenlenmemiş metinde kullanılabilir" else ""),
                         fontSize = 11.5.sp, color = SY.Muted,
@@ -296,7 +296,14 @@ private fun NoteTopBar(
                     onClick = { menu = false; onToggleTimes() },
                 )
                 if (s.hasAudio && !working) {
-                    Quality.entries.filter { it != s.quality }.forEach { q ->
+                    // En iyi: mevcut metin kalır, büyük model doğrudan bir kez çalışır (ön izleme tekrarlanmaz)
+                    if (r.quality != Quality.BEST.name && s.refining == null) {
+                        DropdownMenuItem(
+                            text = { Text("En iyi kalite ile iyileştir") },
+                            onClick = { menu = false; vm.refineWithBest() },
+                        )
+                    }
+                    Quality.entries.filter { it != Quality.BEST && it.name != r.quality }.forEach { q ->
                         DropdownMenuItem(
                             text = { Text("${q.label} kalite ile yeniden dök") },
                             onClick = { menu = false; vm.setQuality(q); vm.retranscribe() },
@@ -305,8 +312,18 @@ private fun NoteTopBar(
                     listOf(Lang.AUTO, Lang.TR, Lang.EN).filter { it.code != r.language && it != s.lang }.forEach { l ->
                         DropdownMenuItem(
                             text = { Text("Dil: ${l.label} ile yeniden dök") },
-                            onClick = { menu = false; vm.setLang(l); vm.retranscribe() },
+                            onClick = { menu = false; vm.retranscribeInLanguage(l) },
                         )
+                    }
+                    if (vm.prefs.devMode && s.refining == null) {
+                        listOf(false, true).forEach { q8 ->
+                            listOf(true, false).forEach { fallback ->
+                                DropdownMenuItem(
+                                    text = { Text("Test: Turbo ${if (q8) "q8" else "q5"} · tekrar deneme ${if (fallback) "açık" else "kapalı"}") },
+                                    onClick = { menu = false; vm.rerunBestExperiment(q8, fallback) },
+                                )
+                            }
+                        }
                     }
                 }
                 DropdownMenuItem(text = { Text("Bu notu sil", color = SY.Error) }, onClick = { menu = false; onDelete() })
@@ -530,7 +547,7 @@ private fun SuggestBest(onRun: () -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text("Hatalı kelimeler mi var?", fontSize = 13.5.sp, color = SY.Text, fontWeight = FontWeight.Medium)
-            Text("\"En iyi\" kalite Türkçede daha doğru, ama daha yavaş.", fontSize = 12.sp, color = SY.Muted)
+            Text("\"En iyi\" kalite Türkçede daha doğru ama yavaş. Bu metin ekranda kalır, bitince güncellenir.", fontSize = 12.sp, color = SY.Muted)
         }
         Pill("En iyi ile dene", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(start = 8.dp), onClick = onRun)
     }
@@ -575,6 +592,21 @@ private fun BarButton(label: String, modifier: Modifier, filled: Boolean, onClic
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(label, color = if (filled) SY.OnAccent else SY.Text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold) }
+}
+
+/**
+ * Süre satırı. En iyi ile iyileştirilmiş notta ön izleme ve En iyi turları ayrı
+ * yazılır (toplam tek sayı olarak gösterilmez; eski kayıtlarda tek sayı).
+ */
+private fun processLine(r: Transcript): String {
+    val tr = Locale("tr")
+    fun sec(ms: Long) = "%.1f".format(tr, ms / 1000.0)
+    val q = r.quality?.let { n -> Quality.entries.firstOrNull { it.name == n } }
+    return when {
+        r.previewMs > 0 -> "✓ Ön izleme ${sec(r.previewMs)} sn · En iyi ${sec(r.processMs)} sn · cihazda yazıya döküldü"
+        q != null -> "✓ ${q.label} · ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
+        else -> "✓ ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
+    }
 }
 
 /** Not başlığı: metnin ilk birkaç kelimesi (dosya adı "PTT-2026…opus" gibi anlamsız olduğundan). */

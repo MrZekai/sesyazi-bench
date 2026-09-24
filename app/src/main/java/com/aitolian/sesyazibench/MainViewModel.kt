@@ -42,9 +42,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Kalite seviyeleri. Hepsi greedy (beam=1). Hızlı ve Dengeli'de sıcaklık
- * yedeklemesi (fallback) kapalı: tek tur çözme. En iyi'nin arka plan
- * iyileştirmesinde açık (doğruluk öncelikli, kullanıcı beklemiyor).
+ * Kalite seviyeleri. Hepsi greedy (beam=1). Tekrar deneme (temperature
+ * fallback) otomatikte Hızlı'da kapalı, Dengeli ve En iyi'de açık; bkz. fallbackFor.
+ * En iyi'nin modeli deneyde q8_0 olabilir; bkz. modelFor.
  */
 enum class Quality(val label: String, val model: WhisperModel, val beam: Int) {
     FAST("Hızlı", WhisperModel.BASE, 1),
@@ -166,7 +166,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ?: if (WhisperEngine.threadCount() <= 2) Quality.FAST else Quality.BALANCED
         val l = prefs.defaultLang?.let { langOf(it) } ?: Lang.AUTO
         val target = prefs.translateTarget?.let { langOf(it) }
-        WhisperEngine.threadOverride = prefs.threadOverride
+        WhisperEngine.threadOverride = if (prefs.devMode) prefs.threadOverride else 0
         _state.update {
             it.copy(quality = q, lang = l, translationTarget = target ?: it.translationTarget, readerFont = prefs.readerFont)
         }
@@ -311,6 +311,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Dil değişiminde açık notun kalitesini koru; genel seçim eski kalmış olabilir. */
+    fun retranscribeInLanguage(lang: Lang) {
+        val st = state.value
+        val quality = Quality.entries.firstOrNull { it.name == st.result?.quality } ?: st.quality
+        _state.update { it.copy(lang = lang, quality = quality) }
+        retranscribe()
+    }
+
     /** Hata: önceki not varsa ona dön (not ekranında kal), yoksa hata ekranı. */
     private fun fail(s: Session, message: String) {
         s.update {
@@ -360,41 +368,71 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return r
     }
 
-    private fun logTiming(s: Session, r: EngineResult, mode: String, pass: String, fallback: Boolean, importMs: Long) {
+    private fun logTiming(
+        s: Session, r: EngineResult, mode: String, pass: String, fallback: Boolean, importMs: Long, cleanCount: Int,
+    ) {
         val first = if (s.firstVisibleAt > 0) s.firstVisibleAt - s.startedAt else -1L
         val total = SystemClock.elapsedRealtime() - s.startedAt
-        val line = ResultLog.summary(r, mode, pass, importMs, first, total)
+        val line = ResultLog.summary(r, mode, pass, importMs, first, total, fallback, cleanCount)
         _state.update { it.copy(lastTiming = line) }
         if (prefs.devMode) {
             viewModelScope.launch(Dispatchers.IO) {
-                runCatching { ResultLog.append(ctx, r, mode, pass, fallback, importMs, first, total) }
+                runCatching { ResultLog.append(ctx, r, mode, pass, fallback, importMs, first, total, cleanCount) }
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Model ve çözme ayarları (geliştirici deneyleri dahil)
+    // ------------------------------------------------------------------
+
+    /** Kalitenin kullanacağı model; En iyi için deneyde q8_0 seçilebilir. */
+    private fun modelFor(q: Quality): WhisperModel =
+        if (q == Quality.BEST && prefs.devMode && prefs.turboQ8) WhisperModel.TURBO_Q8 else q.model
+
+    /**
+     * Tekrar deneme (temperature fallback). Otomatik: Hızlı'da kapalı (hız),
+     * Dengeli ve En iyi'de açık (whisper'ın varsayılan doğruluk davranışı).
+     * Geliştirici araçlarından hep açık / hep kapalı yapılabilir (A/B ölçümü).
+     */
+    private fun fallbackFor(q: Quality): Boolean = when (if (prefs.devMode) prefs.fallbackMode else 0) {
+        1 -> true
+        2 -> false
+        else -> q != Quality.FAST
+    }
+
+    private suspend fun ensureOrFail(s: Session, model: WhisperModel): Boolean {
+        if (ModelStore.isReady(ctx, model)) { ensureModel(model) {}; return true }
+        warnIfMetered(model)
+        val mb = model.approxMb
+        s.update { it.copy(phase = Phase.Downloading(0f, mb)) }
+        if (!ensureModel(model) { p -> s.update { it.copy(phase = Phase.Downloading(p, mb)) } }) {
+            fail(s, "Model indirilemedi. İnterneti ve boş alanı kontrol et.")
+            return false
+        }
+        return true
     }
 
     private suspend fun transcribe(s: Session, a: DecodedAudio, importMs: Long) {
         val st = state.value
         val best = st.quality == Quality.BEST
-        // En iyi modda önce önizleme, sonra arka planda turbo ile iyileştirme.
-        // Dengeli modeli zaten inmişse önizleme onunla (Hızlı'dan belirgin daha doğru).
+        // En iyi: varsayılan olarak önce ön izleme (Dengeli hazırsa onunla, değilse Hızlı),
+        // sonra arka planda büyük modelle iyileştirme. Deneyde ön izleme kapatılabilir:
+        // büyük model doğrudan ve tek tur çalışır.
+        val withPreview = best && (!prefs.devMode || prefs.bestPreview)
         val first = when {
             !best -> st.quality
+            !withPreview -> Quality.BEST
             ModelStore.isReady(ctx, Quality.BALANCED.model) -> Quality.BALANCED
             else -> Quality.FAST
         }
+        val firstModel = modelFor(first)
+        val firstFallback = fallbackFor(first)
 
-        if (!ModelStore.isReady(ctx, first.model)) {
-            warnIfMetered(first.model)
-            val mb = first.model.approxMb
-            s.update { it.copy(phase = Phase.Downloading(0f, mb)) }
-            if (!ensureModel(first.model) { p -> s.update { it.copy(phase = Phase.Downloading(p, mb)) } }) {
-                fail(s, "Model indirilemedi. İnterneti ve boş alanı kontrol et.")
-                return
-            }
-        } else ensureModel(first.model) {}
+        if (!ensureOrFail(s, firstModel)) return
         if (!s.alive()) return
 
-        val eta = SpeedStore.estimateMs(ctx, first.model, a.durationMs)
+        val eta = SpeedStore.estimateMs(ctx, firstModel, a.durationMs)
         s.update {
             it.copy(
                 phase = Phase.Transcribing(0), live = emptyList(), etaSec = (eta / 1000).toInt(),
@@ -403,11 +441,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 adRequest = it.adRequest + 1,
             )
         }
-        val r = runWhisper(s, a, first.model, first.beam, fallback = false, lang = st.lang, stream = true)
+        val r = runWhisper(s, a, firstModel, first.beam, fallback = firstFallback, lang = st.lang, stream = true)
         if (!s.alive()) return
-        logTiming(s, r, first.label, if (best) "onizleme" else "tek", fallback = false, importMs = importMs)
-        if (r.error != null) { fail(s, r.error); return }
         val segs = Postprocess.clean(r.segments)
+        logTiming(
+            s, r, first.label, if (withPreview) "onizleme" else "tek", fallback = firstFallback,
+            importMs = importMs, cleanCount = segs.size,
+        )
+        if (r.error != null) { fail(s, r.error); return }
         if (segs.isEmpty()) {
             fail(s, "Konuşma algılanamadı. Seste net konuşma yoksa (ör. müzik) metin çıkmaz.")
             return
@@ -420,6 +461,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             language = detected,
             processMs = r.transcribeMs,
             segments = segs,
+            quality = first.name,
         )
         if (!s.alive()) return
         val h = HistoryStore.add(ctx, t)
@@ -427,43 +469,58 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 phase = Phase.Idle, result = t, previousResult = null, history = h, live = emptyList(), etaSec = null,
                 translation = null, translating = null, translationTarget = targetFor(t.language),
-                refining = if (best) "✨ Önizleme (${first.label}) · En iyi sonuç hazırlanıyor…" else null,
-                suggestBest = !best && detected == Lang.TR.code,
+                refining = if (withPreview) "✨ Ön izleme (${first.label}) · En iyi sonuç hazırlanıyor…" else null,
+                suggestBest = first != Quality.BEST && detected == Lang.TR.code,
             )
         }
         prefetchDetector(st.lang)
-        if (!best) {
+        if (!withPreview) {
             Notifier.notifyDone(ctx, t.text.take(120))
             return
         }
+        refine(s, a, t, fallbackLang = st.lang, importMs = importMs)
+    }
 
-        // --- İyileştirme turu (En iyi): kullanıcı önizlemeyi okurken arka planda ---
-        if (!ModelStore.isReady(ctx, Quality.BEST.model)) warnIfMetered(Quality.BEST.model)
-        val ok = ensureModel(Quality.BEST.model) { p ->
+    /**
+     * Büyük modelle iyileştirme: mevcut not ekranda kalır, büyük model TEK KEZ
+     * çalışır, bitince not yerinde güncellenir. Dil, mevcut notun dilidir (iki tur
+     * tutarlı olsun, ayrıca dil algılama maliyeti olmasın). İptal/hatada mevcut
+     * not olduğu gibi kalır; kullanıcı düzenlemesi korunur, silinmiş not geri gelmez.
+     */
+    private suspend fun refine(s: Session, a: DecodedAudio, t: Transcript, fallbackLang: Lang, importMs: Long) {
+        val model = modelFor(Quality.BEST)
+        val fallback = fallbackFor(Quality.BEST)
+        s.update { it.copy(refining = "✨ En iyi model hazırlanıyor…", suggestBest = false) }
+        if (!ModelStore.isReady(ctx, model)) warnIfMetered(model)
+        val ok = ensureModel(model) { p ->
             s.update { it.copy(refining = "✨ En iyi model indiriliyor… %${(p * 100).toInt()}") }
         }
         if (!s.alive()) return
         if (!ok) {
-            s.update { it.copy(refining = null, toast = "En iyi model indirilemedi; önizleme gösteriliyor") }
+            s.update { it.copy(refining = null, toast = "En iyi model indirilemedi; mevcut metin gösteriliyor") }
             Notifier.notifyDone(ctx, t.text.take(120))
             return
         }
         s.update { it.copy(refining = "✨ En iyi model ile iyileştiriliyor… %0") }
-        // Dil önizlemede algılandı; aynı dili zorla ki iki tur tutarlı olsun
-        val refineLang = langOf(detected)?.takeIf { it != Lang.AUTO } ?: st.lang
-        val r2 = runWhisper(s, a, Quality.BEST.model, Quality.BEST.beam, fallback = true, lang = refineLang, stream = false)
+        val lang = langOf(t.language)?.takeIf { it != Lang.AUTO } ?: fallbackLang
+        val r2 = runWhisper(s, a, model, Quality.BEST.beam, fallback = fallback, lang = lang, stream = false)
         if (!s.alive()) return
-        logTiming(s, r2, Quality.BEST.label, "iyilestirme", fallback = true, importMs = importMs)
         val refined = Postprocess.clean(r2.segments)
+        logTiming(s, r2, Quality.BEST.label, "iyilestirme", fallback = fallback, importMs = importMs, cleanCount = refined.size)
         if (r2.error != null || refined.isEmpty()) {
-            s.update { it.copy(refining = null, toast = if (r2.error != null) "İyileştirme yapılamadı; önizleme gösteriliyor" else it.toast) }
+            s.update { it.copy(refining = null, toast = if (r2.error != null) "İyileştirme yapılamadı; mevcut metin gösteriliyor" else it.toast) }
             Notifier.notifyDone(ctx, t.text.take(120))
             return
         }
-        // Her zaman diskteki EN GÜNCEL kayıt üzerinden: kullanıcı bu arada düzenlediyse
-        // düzenlemesi korunur; notu sildiyse geri gelmez.
+        // Her zaman diskteki EN GÜNCEL kayıt üzerinden
         val upd = HistoryStore.update(ctx, t.id) { latest ->
-            latest.copy(segments = refined, processMs = r.transcribeMs + r2.transcribeMs)
+            latest.copy(
+                segments = refined,
+                processMs = r2.transcribeMs,
+                // Tekrar Turbo denemesi önceki Turbo süresini "ön izleme" diye yazmasın.
+                previewMs = if (latest.quality == Quality.BEST.name) latest.previewMs else latest.processMs,
+                quality = Quality.BEST.name,
+            )
         }
         if (upd == null) {
             s.update { it.copy(refining = null) }
@@ -479,10 +536,57 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Notifier.notifyDone(ctx, nt.text.take(120))
     }
 
-    /** Not ekranındaki "En iyi ile dene". */
-    fun rerunWithBest() {
-        setQuality(Quality.BEST)
-        retranscribe()
+    /**
+     * Not ekranındaki "En iyi ile dene": ön izlemeyi TEKRARLAMADAN büyük modeli
+     * doğrudan mevcut ses üzerinde çalıştırır. Mevcut metin ekranda kalır.
+     * Ses artık yoksa (geçmişten açılmış not) çalışmaz.
+     */
+    fun refineWithBest() = startBestRefinement(allowExistingBest = false)
+
+    /** Aynı ses üzerinde q5/q8 ve fallback A/B deneyi; mevcut not korunur. */
+    fun rerunBestExperiment(q8: Boolean, fallback: Boolean) {
+        if (!prefs.devMode) { toast("Bu işlem için geliştirici modu açık olmalı"); return }
+        if (isWorking) { toast("Önce mevcut işlem bitsin ya da iptal et"); return }
+        prefs.turboQ8 = q8
+        prefs.fallbackMode = if (fallback) 1 else 2
+        startBestRefinement(allowExistingBest = true)
+    }
+
+    private fun startBestRefinement(allowExistingBest: Boolean) {
+        val a = audio ?: run { toast("Bu notun sesi artık yok; sesi yeniden paylaşman gerekiyor"); return }
+        val cur = state.value.result ?: return
+        if (!allowExistingBest && cur.quality == Quality.BEST.name) {
+            toast("Bu metin zaten En iyi ile üretildi"); return
+        }
+        if (isWorking && state.value.refining == null) { toast("Önce mevcut işlem bitsin"); return }
+        val s = newSession()
+        translateJob?.cancel()
+        _state.update { it.copy(tab = Tab.TEXT, translation = null, translating = null) }
+        s.job = viewModelScope.launch {
+            try {
+                refine(s, a, cur, fallbackLang = state.value.lang, importMs = 0)
+            } catch (t: CancellationException) {
+                throw t
+            } catch (t: Throwable) {
+                s.update { it.copy(refining = null, toast = "İyileştirme yapılamadı: ${t.message ?: t.javaClass.simpleName}") }
+            }
+        }
+    }
+
+    // --- Geliştirici deney ayarları ---
+    fun disableDevMode() {
+        prefs.disableDevModeAndResetExperiments()
+        WhisperEngine.threadOverride = 0
+        toast("Geliştirici modu kapatıldı; deney ayarları sıfırlandı")
+    }
+
+    fun setFallbackMode(m: Int) { prefs.fallbackMode = m }
+    fun setBestPreview(on: Boolean) { prefs.bestPreview = on }
+    fun setTurboQ8(on: Boolean) {
+        prefs.turboQ8 = on
+        if (on && !ModelStore.isReady(ctx, WhisperModel.TURBO_Q8)) {
+            toast("En iyi seçildiğinde ${WhisperModel.TURBO_Q8.approxMb} MB q8_0 modeli indirilecek")
+        }
     }
 
     /**

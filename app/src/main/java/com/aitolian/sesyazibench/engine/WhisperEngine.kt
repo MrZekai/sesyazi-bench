@@ -53,10 +53,14 @@ class WhisperEngine(
             // Otomatik dil: büyük modeli iki kez çalıştırmamak için dili küçük (base) modelle bul
             var langCode = lang.code
             var detectMs = 0L
+            var detectPath = if (lang == Lang.AUTO) "model_ici" else "secili"
             if (lang == Lang.AUTO && model != WhisperModel.BASE && ModelStore.isReady(context, WhisperModel.BASE)) {
                 val td = SystemClock.elapsedRealtime()
                 val d = detectorCtx(context)
-                if (d != 0L) langCode = WhisperNative.nativeDetectLanguage(d, audio.samples, threads)
+                if (d != 0L) {
+                    langCode = WhisperNative.nativeDetectLanguage(d, audio.samples, threads)
+                    if (langCode != "auto") detectPath = "base"
+                }
                 detectMs = SystemClock.elapsedRealtime() - td
             }
             if (cancel.get()) return@withLock base.copy(loadMs = loadMs, detectMs = detectMs, error = CANCELLED)
@@ -83,7 +87,9 @@ class WhisperEngine(
                 listener,
             )
             val ms = SystemClock.elapsedRealtime() - t1
-            val timed = base.copy(loadMs = loadMs, transcribeMs = ms, detectMs = detectMs, firstSegmentMs = firstSegmentMs)
+            val timed = base.copy(
+                loadMs = loadMs, transcribeMs = ms, detectMs = detectMs, firstSegmentMs = firstSegmentMs, detectPath = detectPath,
+            )
             if (cancel.get()) return@withLock timed.copy(error = CANCELLED)
             val raw = bytes?.toString(Charsets.UTF_8) ?: return@withLock timed.copy(error = "Bellek yetersiz")
             if (raw.startsWith("ERR")) return@withLock timed.copy(error = raw)
@@ -92,6 +98,7 @@ class WhisperEngine(
             var encodeMs = 0L
             var decodeMs = 0L
             var windows = 0
+            var rawSegmentCount = 0
             val segs = mutableListOf<Segment>()
             raw.lineSequence().filter { it.isNotBlank() }.forEach { line ->
                 val p = line.split('\t')
@@ -106,10 +113,15 @@ class WhisperEngine(
                     }
                     else -> {
                         val q = line.split('\t', limit = 3)
-                        if (q.size == 3 && q[2].isNotBlank() && !Postprocess.isNoise(q[2])) {
+                        if (q.size == 3) {
                             val s = q[0].toLongOrNull()
                             val e = q[1].toLongOrNull()
-                            if (s != null && e != null) segs += Segment(s, e, q[2].trim())
+                            if (s != null && e != null) {
+                                rawSegmentCount++
+                                if (q[2].isNotBlank() && !Postprocess.isNoise(q[2])) {
+                                    segs += Segment(s, e, q[2].trim())
+                                }
+                            }
                         }
                     }
                 }
@@ -121,6 +133,7 @@ class WhisperEngine(
                 encodeMs = encodeMs,
                 decodeMs = decodeMs,
                 windows = windows,
+                rawSegmentCount = rawSegmentCount,
             )
         }
     }
@@ -181,7 +194,7 @@ class WhisperEngine(
             cachedCtx = 0L
             cachedModel = null
             // Büyük model (turbo) yüklenirken ikinci bağlamı bellekte tutma: düşük RAM'de süreç ölür
-            if (model == WhisperModel.TURBO && detectCtx != 0L) {
+            if (model.isLarge && detectCtx != 0L) {
                 WhisperNative.nativeFree(detectCtx)
                 detectCtx = 0L
             }

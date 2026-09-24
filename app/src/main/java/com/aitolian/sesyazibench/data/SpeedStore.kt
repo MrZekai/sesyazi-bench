@@ -16,6 +16,7 @@ object SpeedStore {
         WhisperModel.BASE -> 0.4f
         WhisperModel.SMALL -> 1.0f
         WhisperModel.TURBO -> 5.0f
+        WhisperModel.TURBO_Q8 -> 4.0f
     }
 
     fun rtf(c: Context, m: WhisperModel): Float =

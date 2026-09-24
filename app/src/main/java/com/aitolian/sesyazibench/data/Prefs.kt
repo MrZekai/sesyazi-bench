@@ -32,6 +32,28 @@ class Prefs(context: Context) {
         get() = p.getInt("threads", 0)
         set(v) = p.edit().putInt("threads", v).apply()
 
+    /** Deney: tekrar deneme (temperature fallback) 0 = otomatik, 1 = hep açık, 2 = hep kapalı. */
+    var fallbackMode: Int
+        get() = p.getInt("fallback", 0)
+        set(v) = p.edit().putInt("fallback", v).apply()
+
+    /** Deney: En iyi'de önce ön izleme göster (true) ya da büyük modeli doğrudan çalıştır. */
+    var bestPreview: Boolean
+        get() = p.getBoolean("best_preview", true)
+        set(v) = p.edit().putBoolean("best_preview", v).apply()
+
+    /** Deney: En iyi için large-v3-turbo q8_0 (834 MB) kullan. */
+    var turboQ8: Boolean
+        get() = p.getBoolean("turbo_q8", false)
+        set(v) = p.edit().putBoolean("turbo_q8", v).apply()
+
+    /** Deney tercihlerinin görünmeden normal kullanımı etkilemesini engeller. */
+    fun disableDevModeAndResetExperiments() {
+        p.edit().putBoolean("dev", false)
+            .remove("fallback").remove("best_preview").remove("turbo_q8").remove("threads")
+            .apply()
+    }
+
     var devMode: Boolean
         get() = p.getBoolean("dev", false)
         set(v) = p.edit().putBoolean("dev", v).apply()

@@ -288,7 +288,7 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
                 (listOf(Lang.AUTO) + TRANSLATABLE).forEach { l ->
                     DropdownMenuItem(text = { Text(l.label) }, onClick = {
                         langOpen = false
-                        if (l != s.lang) { vm.setLang(l); vm.retranscribe() }
+                        if (l != s.lang) vm.retranscribeInLanguage(l)
                     })
                 }
             }
@@ -426,4 +426,3 @@ internal fun shareText(context: Context, text: String) {
     val i = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
     context.startActivity(Intent.createChooser(i, "Paylaş"))
 }
-

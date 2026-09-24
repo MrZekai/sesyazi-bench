@@ -64,6 +64,7 @@ import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.OnDeviceTranslator
 import com.aitolian.sesyazibench.engine.TRANSLATABLE
+import com.aitolian.sesyazibench.engine.WhisperModel
 import kotlinx.coroutines.launch
 
 // Yayın öncesi bu uygulamaya özel adreslerle güncellenmeli
@@ -219,7 +220,7 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                 }
             }
 
-            if (devMode) DevTools(vm, s)
+            if (devMode) DevTools(vm, s, onClose = { devMode = false })
             if (confirmClear) {
                 AlertDialog(
                     onDismissRequest = { confirmClear = false },
@@ -245,7 +246,7 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
 }
 
 @Composable
-private fun DevTools(vm: MainViewModel, s: MainState) {
+private fun DevTools(vm: MainViewModel, s: MainState, onClose: () -> Unit) {
     val context = LocalContext.current
     var pendingAdvanced by remember { mutableStateOf(false) }
     // ML Kit BASIC, dosyadan okusa bile Android tanıyıcısı mikrofon izni istiyor
@@ -260,6 +261,12 @@ private fun DevTools(vm: MainViewModel, s: MainState) {
     }
     val info = remember { vm.deviceInfo() }
     var threads by remember { mutableIntStateOf(vm.prefs.threadOverride) }
+    var fallbackMode by remember { mutableIntStateOf(vm.prefs.fallbackMode) }
+    var bestPreview by remember { mutableStateOf(vm.prefs.bestPreview) }
+    var turboQ8 by remember { mutableStateOf(vm.prefs.turboQ8) }
+    var q8Refresh by remember { mutableIntStateOf(0) }
+    val q8Progress = s.modelDownloads[WhisperModel.TURBO_Q8]
+    val q8Ready = remember(q8Refresh, q8Progress) { vm.modelReady(WhisperModel.TURBO_Q8) }
     Group("Geliştirici") {
         Text(info, fontSize = 11.5.sp, color = SY.Muted)
         // Son dökümün aşama süreleri — hızın nerede kaybolduğunu gösterir
@@ -275,6 +282,46 @@ private fun DevTools(vm: MainViewModel, s: MainState) {
                 )
             }
         }
+
+        // --- Hız/doğruluk deneyleri: her ölçüm satırına hangi ayarla çalışıldığı yazılır ---
+        Text("Tekrar deneme (fallback)", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text("Oto: Hızlı'da kapalı, Dengeli ve En iyi'de açık.", fontSize = 12.sp, color = SY.Muted)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(0 to "Oto", 1 to "Hep açık", 2 to "Hep kapalı").forEach { (m, label) ->
+                val sel = fallbackMode == m
+                Pill(label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
+                    onClick = { fallbackMode = m; vm.setFallbackMode(m) })
+            }
+        }
+        Text("En iyi modu", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(true to "Ön izlemeli", false to "Doğrudan büyük model").forEach { (on, label) ->
+                val sel = bestPreview == on
+                Pill(label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
+                    onClick = { bestPreview = on; vm.setBestPreview(on) })
+            }
+        }
+        Text("En iyi modeli", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(false to "q5_0 (547 MB)", true to "q8_0 (834 MB)").forEach { (on, label) ->
+                val sel = turboQ8 == on
+                Pill(label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
+                    onClick = { turboQ8 = on; vm.setTurboQ8(on) })
+            }
+        }
+        ItemRow("large-v3-turbo q8_0", "${WhisperModel.TURBO_Q8.approxMb} MB · ${if (q8Ready) "indirildi" else "indirilmedi"}") {
+            when {
+                q8Progress != null -> LinearProgressIndicator(
+                    progress = { q8Progress }, modifier = Modifier.width(70.dp), color = SY.Accent, trackColor = SY.Chip,
+                )
+                q8Ready -> TextAction("Sil", SY.Error) { vm.deleteModel(WhisperModel.TURBO_Q8); q8Refresh++ }
+                else -> TextAction("İndir", SY.Accent) { vm.downloadModel(WhisperModel.TURBO_Q8) }
+            }
+        }
+        Text(
+            "Karşılaştırma için dili Türkçe seç, aynı sesi her ayarla en az 3 kez dök. İlk tur (model yükleme) soğuk sayılır.",
+            fontSize = 12.sp, color = SY.Muted,
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill("ML Kit Basic", bg = SY.Chip, fg = SY.Text, onClick = { runMlKit(false) })
             Pill("ML Kit Advanced", bg = SY.Chip, fg = SY.Text, onClick = { runMlKit(true) })
@@ -284,7 +331,7 @@ private fun DevTools(vm: MainViewModel, s: MainState) {
                 if (!shareCsv(context)) vm.toast("Henüz kayıt yok (geliştirici modu açıkken dökülen sesler kaydedilir)")
             })
             Pill("Sil", bg = SY.Chip, fg = SY.Text, onClick = { ResultLog.clear(context); vm.toast("Kayıtlar silindi") })
-            Pill("Kapat", bg = SY.Chip, fg = SY.Text, onClick = { vm.prefs.devMode = false; vm.toast("Ayarlar'ı yeniden aç") })
+            Pill("Kapat", bg = SY.Chip, fg = SY.Text, onClick = { vm.disableDevMode(); onClose() })
         }
         s.testLog.forEach { Text(it, fontSize = 12.sp, color = SY.Text) }
     }

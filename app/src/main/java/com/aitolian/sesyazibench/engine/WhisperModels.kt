@@ -29,7 +29,12 @@ enum class WhisperModel(val fileName: String, val label: String, val approxMb: I
     TINY("ggml-tiny-q5_1.bin", "tiny q5_1", 31),
     BASE("ggml-base-q8_0.bin", "base q8_0", 78),
     SMALL("ggml-small-q8_0.bin", "small q8_0", 252),
-    TURBO("ggml-large-v3-turbo-q5_0.bin", "large-v3-turbo q5_0", 547);
+    TURBO("ggml-large-v3-turbo-q5_0.bin", "large-v3-turbo q5_0", 547),
+    /** Deney (geliştirici araçları): q8_0 → ARM repack yolu; daha büyük dosya ve bellek. */
+    TURBO_Q8("ggml-large-v3-turbo-q8_0.bin", "large-v3-turbo q8_0", 834);
+
+    /** Büyük model: yüklenirken ikinci (dil algılama) bağlamı bellekte tutulmaz. */
+    val isLarge: Boolean get() = this == TURBO || this == TURBO_Q8
 
     val url: String get() = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$fileName"
 }

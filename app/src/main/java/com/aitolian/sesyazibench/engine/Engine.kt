@@ -26,6 +26,13 @@ data class EngineResult(
     val threads: Int = 0,
     /** Encoder'ın çalıştığı 30 sn'lik pencere sayısı. */
     val windows: Int = 0,
+    /**
+     * Dil nasıl belirlendi: "secili" (kullanıcı seçti), "base" (ayrı küçük modelle,
+     * süresi detectMs'te), "model_ici" (büyük modelin içinde; süresi STT'ye dahil).
+     */
+    val detectPath: String = "",
+    /** Native çıktıdaki geçerli zaman damgalı parça sayısı; metin filtresinden ÖNCE. */
+    val rawSegmentCount: Int = 0,
 ) {
     /** Gerçek zaman katsayısı: 0.25 => 60 sn ses 15 sn'de bitti. */
     val rtf: Double get() = if (audioMs > 0) transcribeMs.toDouble() / audioMs else 0.0
