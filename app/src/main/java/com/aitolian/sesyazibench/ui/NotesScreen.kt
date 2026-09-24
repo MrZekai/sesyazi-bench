@@ -1,0 +1,202 @@
+package com.aitolian.sesyazibench.ui
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
+import com.aitolian.sesyazibench.MainState
+import com.aitolian.sesyazibench.MainViewModel
+import com.aitolian.sesyazibench.data.Transcript
+import java.util.Locale
+
+/**
+ * Tüm notlar + arama. Arama Türkçe harflere duyarsızdır (ı/i, ş/s, ğ/g…),
+ * eşleşen yer kartta vurgulanır. Dokun → aç, basılı tut → sil (geri alınabilir).
+ */
+@Composable
+fun AllNotesScreen(s: MainState, vm: MainViewModel, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    var query by rememberSaveable { mutableStateOf("") }
+    val q = remember(query) { fold(query.trim()) }
+    val results = remember(s.history, q) {
+        if (q.isEmpty()) s.history.map { it to null }
+        else s.history.mapNotNull { t ->
+            val idx = fold(t.text).indexOf(q)
+            when {
+                idx >= 0 -> t to idx
+                fold(t.fileName).contains(q) -> t to null
+                else -> null
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(SY.Bg).statusBarsPadding().navigationBarsPadding().imePadding()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onBack)
+                    .semantics { contentDescription = "Geri" },
+                contentAlignment = Alignment.Center,
+            ) { Text("←", fontSize = 22.sp, color = SY.Text) }
+            Text("Notlarım", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = SY.Text, modifier = Modifier.weight(1f))
+            Text("${s.history.size}/${com.aitolian.sesyazibench.data.HistoryStore.MAX}", color = SY.Muted, fontSize = 12.sp,
+                modifier = Modifier.padding(end = 12.dp))
+        }
+        // Arama kutusu
+        Box(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(14.dp))
+                .background(SY.Card).padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            if (query.isEmpty()) Text("🔍  Notlarda ara…", color = SY.Muted, fontSize = 15.sp)
+            BasicTextField(
+                value = query, onValueChange = { query = it }, singleLine = true,
+                textStyle = TextStyle(color = SY.Text, fontSize = 15.sp),
+                cursorBrush = SolidColor(SY.Accent),
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Notlarda ara" },
+            )
+        }
+        if (results.isEmpty()) {
+            Text(
+                if (q.isEmpty()) "Henüz not yok." else "\"$query\" hiçbir notta geçmiyor.",
+                color = SY.Muted, fontSize = 14.sp, modifier = Modifier.padding(24.dp),
+            )
+        }
+        UndoRow(s, vm)
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(results, key = { it.first.id }) { (t, hit) ->
+                NoteCard(
+                    t, onOpen = { vm.openHistory(t) }, onDelete = { vm.deleteHistory(t) },
+                    snippet = hit?.let { highlight(t.text, it, q.length) },
+                )
+            }
+        }
+        Text(
+            "En fazla ${com.aitolian.sesyazibench.data.HistoryStore.MAX} not saklanır; yenisi gelince en eskisi silinir.",
+            color = SY.Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun UndoRow(s: MainState, vm: MainViewModel) {
+    val d = s.undoDeleted ?: return
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(12.dp))
+            .background(SY.Card).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Silindi: ${d.preview}", color = SY.Muted, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(
+            "Geri al", color = SY.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = vm::undoDelete).padding(8.dp),
+        )
+    }
+}
+
+/** Not kartı (ana sayfa ve Tüm notlar). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun NoteCard(t: Transcript, onOpen: () -> Unit, onDelete: () -> Unit, snippet: AnnotatedString? = null) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SY.Card)
+            .combinedClickable(
+                onClickLabel = "Notu aç", onLongClickLabel = "Notu sil",
+                onClick = onOpen, onLongClick = onDelete,
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                titleOf(t), color = SY.Text, fontSize = 14.5.sp, fontWeight = FontWeight.Medium,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            Text(
+                "${Transcript.clock(t.durationMs)} · ${noteDate(t)}", color = SY.Muted, fontSize = 11.5.sp,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        if (snippet != null) {
+            Text(snippet, color = SY.Muted, fontSize = 12.5.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp))
+        } else {
+            Text(t.text, color = SY.Muted, fontSize = 12.5.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp))
+        }
+    }
+}
+
+private val TR = Locale("tr")
+
+/**
+ * Aramada harf farklarını yok say. Karakter sayısını korur (katlanmış metindeki
+ * indeks orijinal metinde de geçerli olsun diye tek karakter → tek karakter).
+ */
+internal fun fold(s: String): String = buildString(s.length) {
+    for (c in s) {
+        val l = c.toString().lowercase(TR).singleOrNull() ?: c.lowercaseChar()
+        append(
+            when (l) {
+                'ı' -> 'i'; 'ş' -> 's'; 'ğ' -> 'g'; 'ü' -> 'u'; 'ö' -> 'o'; 'ç' -> 'c'
+                'â' -> 'a'; 'î' -> 'i'; 'û' -> 'u'
+                else -> l
+            },
+        )
+    }
+}
+
+/** Eşleşmenin çevresinden kısa bir parça, eşleşen kısım vurgulu. */
+private fun highlight(text: String, idx: Int, len: Int): AnnotatedString {
+    val from = (idx - 40).coerceAtLeast(0)
+    val to = (idx + len + 80).coerceAtMost(text.length)
+    return buildAnnotatedString {
+        if (from > 0) append("…")
+        append(text.substring(from, idx))
+        withStyle(SpanStyle(color = SY.Accent, fontWeight = FontWeight.SemiBold)) { append(text.substring(idx, (idx + len).coerceAtMost(text.length))) }
+        append(text.substring((idx + len).coerceAtMost(text.length), to))
+        if (to < text.length) append("…")
+    }
+}

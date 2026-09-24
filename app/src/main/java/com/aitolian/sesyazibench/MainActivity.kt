@@ -36,7 +36,10 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     vm,
                     onNewAudio = { then -> then() }, // reklam artık döküm başında
-                    onProcessingAd = { lifecycleScope.launch { Ads.showWhenReady(this@MainActivity) } },
+                    // Metin ekrana gelmeden önce; metin geldiyse / iş iptal edildiyse gösterilmez
+                    onProcessingAd = {
+                        lifecycleScope.launch { Ads.showWhenReady(this@MainActivity, stillWanted = vm::adStillWanted) }
+                    },
                 )
             }
         }

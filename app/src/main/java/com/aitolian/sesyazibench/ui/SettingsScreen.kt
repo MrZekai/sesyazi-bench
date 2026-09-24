@@ -79,9 +79,9 @@ private const val LICENSES =
     "• AndroidX, Jetpack Compose, Kotlin — Apache Lisansı 2.0"
 
 private fun Quality.description() = when (this) {
-    Quality.FAST -> "En hızlı. Kısa ve net mesajlar için; doğruluk daha düşük."
+    Quality.FAST -> "En hızlı. Kısa ve net mesajlar için; doğruluk daha düşük. Dil algılamada da kullanılır."
     Quality.BALANCED -> "Çoğu mesaj için önerilen. Orta seviye telefonlarda biraz bekletebilir."
-    Quality.BEST -> "En doğru. Önce hızlı metin gelir, arka planda iyileştirilir."
+    Quality.BEST -> "En doğru. Önce Dengeli/Hızlı ön izleme gelir, arka planda büyük modelle iyileştirilir."
 }
 
 @Composable
@@ -195,7 +195,7 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                     color = SY.Muted, fontSize = 12.5.sp,
                 )
                 LinkRow("Gizlilik politikası") { openUrl(context, PRIVACY_URL) }
-                LinkRow("Döküm geçmişini temizle (${s.history.size})") { confirmClear = true }
+                LinkRow("Tüm notları sil (${s.history.size})") { confirmClear = true }
                 if (activity != null && Ads.privacyOptionsRequired(activity)) {
                     LinkRow("Reklam tercihleri") { Ads.showPrivacyOptions(activity) }
                 }
@@ -224,8 +224,8 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                 AlertDialog(
                     onDismissRequest = { confirmClear = false },
                     containerColor = SY.Sheet, titleContentColor = SY.Text, textContentColor = SY.Muted,
-                    title = { Text("Geçmiş silinsin mi?") },
-                    text = { Text("Telefondaki tüm döküm metinleri silinir. Bu işlem geri alınamaz.") },
+                    title = { Text("Tüm notlar silinsin mi?") },
+                    text = { Text("Telefondaki tüm notlar, dışa aktarılan dosyalar ve ölçüm kayıtları silinir. Çalışan döküm durdurulur. Bu işlem geri alınamaz.") },
                     confirmButton = { TextButton(onClick = { vm.clearHistory(); confirmClear = false }) { Text("Sil", color = SY.Error) } },
                     dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Vazgeç", color = SY.Accent) } },
                 )
@@ -258,15 +258,32 @@ private fun DevTools(vm: MainViewModel, s: MainState) {
             vm.runMlKitTest(advanced)
         } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
+    val info = remember { vm.deviceInfo() }
+    var threads by remember { mutableIntStateOf(vm.prefs.threadOverride) }
     Group("Geliştirici") {
-        Text(vm.deviceInfo(), fontSize = 11.5.sp, color = SY.Muted)
+        Text(info, fontSize = 11.5.sp, color = SY.Muted)
+        // Son dökümün aşama süreleri — hızın nerede kaybolduğunu gösterir
+        Text("Son döküm süreleri", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(s.lastTiming ?: "Henüz ölçüm yok. Bir ses dök.", fontSize = 12.sp, color = SY.Text)
+        Text("Thread sayısı (A/B ölçümü)", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(0, 2, 3, 4, 6).forEach { n ->
+                val sel = threads == n
+                Pill(
+                    if (n == 0) "Oto" else "$n", bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
+                    onClick = { threads = n; vm.setThreadOverride(n) },
+                )
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill("ML Kit Basic", bg = SY.Chip, fg = SY.Text, onClick = { runMlKit(false) })
             Pill("ML Kit Advanced", bg = SY.Chip, fg = SY.Text, onClick = { runMlKit(true) })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("CSV paylaş", bg = SY.Chip, fg = SY.Text, onClick = { shareCsv(context) })
-            Pill("CSV sil", bg = SY.Chip, fg = SY.Text, onClick = { ResultLog.clear(context); vm.toast("Kayıtlar silindi") })
+            Pill("Süreleri paylaş", bg = SY.Chip, fg = SY.Text, onClick = {
+                if (!shareCsv(context)) vm.toast("Henüz kayıt yok (geliştirici modu açıkken dökülen sesler kaydedilir)")
+            })
+            Pill("Sil", bg = SY.Chip, fg = SY.Text, onClick = { ResultLog.clear(context); vm.toast("Kayıtlar silindi") })
             Pill("Kapat", bg = SY.Chip, fg = SY.Text, onClick = { vm.prefs.devMode = false; vm.toast("Ayarlar'ı yeniden aç") })
         }
         s.testLog.forEach { Text(it, fontSize = 12.sp, color = SY.Text) }
@@ -342,14 +359,15 @@ private fun openUrl(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }
 
-private fun shareCsv(context: Context) {
+private fun shareCsv(context: Context): Boolean {
     val f = ResultLog.file(context)
-    if (!f.exists()) return
+    if (!f.exists()) return false
     val uri = FileProvider.getUriForFile(context, context.packageName + ".files", f)
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/csv"
         putExtra(Intent.EXTRA_STREAM, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(send, "Sonuçları paylaş"))
+    context.startActivity(Intent.createChooser(send, "Süreleri paylaş"))
+    return true
 }

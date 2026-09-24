@@ -2,8 +2,11 @@ package com.aitolian.sesyazibench.ads
 
 import android.app.Activity
 import android.content.Context
-import android.os.SystemClock
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.Lifecycle
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
@@ -35,8 +38,11 @@ object Ads {
     /** Rıza alındı ve SDK hazır — banner ancak o zaman istenir. */
     val ready: StateFlow<Boolean> = _ready
     private var interstitial: InterstitialAd? = null
-    private var lastShownAt = 0L
-    private val shownTimes = ArrayDeque<Long>()
+    private var loading = false
+    private var appContext: Context? = null
+    private val main = Handler(Looper.getMainLooper())
+    private const val PREFS = "ads"
+    private const val KEY_TIMES = "shown_times"
 
     /** UMP rıza akışı (AB/UK) → ardından MobileAds başlatılır. */
     fun start(activity: Activity) {
@@ -57,23 +63,45 @@ object Ads {
 
     private fun initSdk(activity: Activity) {
         if (!started.compareAndSet(false, true)) return
+        appContext = activity.applicationContext
         MobileAds.initialize(activity.applicationContext) {
-            _ready.value = true
-            loadInterstitial(activity.applicationContext)
+            main.post {
+                _ready.value = true
+                loadInterstitial()
+            }
         }
     }
 
-    private fun loadInterstitial(context: Context) {
+    /** Ana iş parçacığında çağrılır. Başarısız yüklemede 30 sn sonra bir kez daha dener. */
+    private fun loadInterstitial(retry: Int = 0) {
+        val context = appContext ?: return
+        if (interstitial != null || loading) return
+        loading = true
         InterstitialAd.load(
             context, INTERSTITIAL_ID, AdRequest.Builder().build(),
             object : InterstitialAdLoadCallback() {
-                override fun onAdLoaded(ad: InterstitialAd) { interstitial = ad }
+                override fun onAdLoaded(ad: InterstitialAd) { loading = false; interstitial = ad }
                 override fun onAdFailedToLoad(error: LoadAdError) {
+                    loading = false
                     interstitial = null
                     Log.w("Ads", "interstitial load: ${error.message}")
+                    if (retry < 3) main.postDelayed({ loadInterstitial(retry + 1) }, 30_000L * (retry + 1))
                 }
             },
         )
+    }
+
+    /** Gösterim zamanları kalıcıdır (uygulama yeniden açılınca sınır sıfırlanmaz). */
+    private fun recentShows(context: Context, now: Long): MutableList<Long> {
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_TIMES, "") ?: ""
+        return raw.split(',').mapNotNull { it.toLongOrNull() }
+            .filter { now - it in 0..3_600_000L } // saat geri alınırsa da eski kayıtları at
+            .toMutableList()
+    }
+
+    private fun saveShows(context: Context, times: List<Long>) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_TIMES, times.joinToString(",")).apply()
     }
 
     /** AB/UK'de kullanıcı reklam rızasını sonradan değiştirebilmeli (Ayarlar > Gizlilik). */
@@ -88,47 +116,44 @@ object Ads {
     }
 
     /**
-     * Uygulama Paylaş ile soğuk açıldığında reklam henüz yüklenmemiş olabilir:
-     * kısa bir süre bekleyip hazırsa gösterir. Döküm bu sırada arkada sürer.
+     * Döküm başında çağrılır. Reklam henüz yüklenmemişse en fazla [timeoutMs]
+     * bekler. Gösterim ancak [stillWanted] hâlâ doğruysa (metin ekrana gelmemiş,
+     * iş iptal edilmemiş) ve ekran ön plandaysa yapılır: sonuç okunurken üstüne
+     * sonradan reklam bindirilmez. Döküm reklamın arkasında sürer.
      */
-    suspend fun showWhenReady(activity: Activity, timeoutMs: Long = 3_000) {
+    suspend fun showWhenReady(activity: ComponentActivity, stillWanted: () -> Boolean, timeoutMs: Long = 3_000) {
+        if (!_ready.value) return
+        if (interstitial == null) main.post { loadInterstitial() }
         var waited = 0L
         while (interstitial == null && waited < timeoutMs) {
+            if (!stillWanted()) return
             kotlinx.coroutines.delay(200); waited += 200
         }
-        maybeShowInterstitial(activity) {}
+        if (!stillWanted()) return
+        if (!activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        showIfAllowed(activity)
     }
 
-    /** Geriye dönük uyumluluk; artık sayaç tutulmuyor. */
+    /** Geriye dönük uyumluluk; sayaç artık gösterimde tutuluyor. */
     fun onTranscriptionDone() {}
 
-    /**
-     * Döküm başladığında (metin ekrana gelmeden önce) sınırlar uygunsa geçiş
-     * reklamı gösterir; döküm reklamın arkasında sürer. Ardından [then] çalışır.
-     */
-    fun maybeShowInterstitial(activity: Activity, then: () -> Unit) {
-        val now = SystemClock.elapsedRealtime()
-        while (shownTimes.isNotEmpty() && now - shownTimes.first() > 3_600_000L) shownTimes.removeFirst()
+    private fun showIfAllowed(activity: Activity) {
+        val now = System.currentTimeMillis()
+        val times = recentShows(activity, now)
+        val last = times.maxOrNull()
+        val allowed = (last == null || now - last >= MIN_GAP_MS) && times.size < MAX_PER_HOUR
         val ad = interstitial
-        val allowed = ad != null &&
-            (lastShownAt == 0L || now - lastShownAt >= MIN_GAP_MS) &&
-            shownTimes.size < MAX_PER_HOUR
-        if (!allowed) { then(); return }
-
-        ad!!.fullScreenContentCallback = object : FullScreenContentCallback() {
-            override fun onAdDismissedFullScreenContent() {
-                interstitial = null
-                loadInterstitial(activity.applicationContext)
-                then()
-            }
+        if (!allowed || ad == null) return
+        interstitial = null // tek kullanımlık nesne: gösterimden önce tüket
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() { loadInterstitial() }
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
-                interstitial = null
-                loadInterstitial(activity.applicationContext)
-                then()
+                Log.w("Ads", "interstitial show: ${error.message}")
+                loadInterstitial()
             }
         }
-        lastShownAt = now
-        shownTimes.addLast(now)
+        times += now
+        saveShows(activity, times)
         ad.show(activity)
     }
 }

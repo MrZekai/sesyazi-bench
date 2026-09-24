@@ -1,7 +1,12 @@
 package com.aitolian.sesyazibench.data
 
 import android.content.Context
+import android.util.AtomicFile
 import com.aitolian.sesyazibench.engine.Segment
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -16,11 +21,14 @@ data class Transcript(
     val segments: List<Segment>,
     /** Kullanıcının not ekranında düzelttiği metin (varsa ham dökümün yerine gösterilir). */
     val editedText: String? = null,
+    /** Her kullanıcı düzenlemesinde artar; arka plan işleri eski sürümün üzerine yazmasın diye. */
+    val revision: Int = 0,
 ) {
     val rawText: String get() = segments.joinToString(" ") { it.text }
     val text: String get() = editedText ?: rawText
     val preview: String get() = text.take(40).let { if (text.length > 40) "$it…" else it }
 
+    /** Zamanlı altyazı; her zaman orijinal (zaman damgalı) parçalardan üretilir. */
     fun toSrt(): String = buildString {
         segments.forEachIndexed { i, s ->
             append(i + 1).append('\n')
@@ -28,8 +36,6 @@ data class Transcript(
             append(s.text).append("\n\n")
         }
     }
-
-    fun toTxt(): String = editedText ?: segments.joinToString("\n") { "[${clock(it.startMs)}] ${it.text}" }
 
     companion object {
         fun clock(ms: Long): String = "%d:%02d".format(Locale.US, ms / 60_000, (ms / 1000) % 60)
@@ -39,14 +45,112 @@ data class Transcript(
     }
 }
 
-/** Son dökümler — cihazda JSON dosyası, en fazla 20 kayıt. */
+/**
+ * Notlar — cihazda JSON dosyası. Bütün okuma-değiştirme-yazma işlemleri tek
+ * kilit altında ve bellekteki kopya üzerinden yapılır; disk yazımı AtomicFile
+ * ile atomiktir (yarıda kesilen yazma eski dosyayı bozmaz). Dosya bozuksa
+ * sessizce silinmez, yedeklenir.
+ */
 object HistoryStore {
-    private const val MAX = 20
-    private fun file(c: Context) = File(c.filesDir, "history.json")
+    const val MAX = 50
+    private val mutex = Mutex()
+    private var cache: List<Transcript>? = null
 
-    fun load(c: Context): List<Transcript> = runCatching {
-        val arr = JSONArray(file(c).readText())
-        (0 until arr.length()).map { i ->
+    private fun file(c: Context) = AtomicFile(File(c.filesDir, "history.json"))
+
+    suspend fun load(c: Context): List<Transcript> = mutex.withLock { current(c) }
+
+    /** Yeni kayıt ekler ya da aynı id'liyi değiştirir (en üste taşır). */
+    suspend fun add(c: Context, t: Transcript): List<Transcript> = mutate(c) { list ->
+        (listOf(t) + list.filter { it.id != t.id }).take(MAX)
+    }
+
+    /**
+     * Var olan kaydı dönüştürür. Kayıt silinmişse hiçbir şey yapmaz ve null döner
+     * (silinen not arka plan işiyle geri gelmez).
+     */
+    suspend fun update(c: Context, id: Long, change: (Transcript) -> Transcript): Pair<List<Transcript>, Transcript>? =
+        mutex.withLock {
+            val list = current(c)
+            val old = list.firstOrNull { it.id == id } ?: return@withLock null
+            val new = change(old)
+            val next = list.map { if (it.id == id) new else it }
+            write(c, next)
+            next to new
+        }
+
+    suspend fun remove(c: Context, id: Long): List<Transcript> = mutate(c) { list -> list.filter { it.id != id } }
+
+    /** "Geri al": silinen kaydı zaman sırasındaki yerine geri koyar. */
+    suspend fun restore(c: Context, t: Transcript): List<Transcript> = mutate(c) { list ->
+        (list.filter { it.id != t.id } + t).sortedByDescending { it.id }.take(MAX)
+    }
+
+    suspend fun clear(c: Context) = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            file(c).delete()
+            File(c.filesDir, "history.json.new").delete()
+            File(c.filesDir, "history.json.bak").delete()
+            File(c.filesDir, "history.json.tmp").delete() // v1.7-1.8 geçici dosyası
+        }
+        cache = emptyList()
+    }
+
+    private suspend fun mutate(c: Context, change: (List<Transcript>) -> List<Transcript>): List<Transcript> =
+        mutex.withLock {
+            val next = change(current(c))
+            write(c, next)
+            next
+        }
+
+    private suspend fun current(c: Context): List<Transcript> =
+        cache ?: withContext(Dispatchers.IO) { read(c) }.also { cache = it }
+
+    private suspend fun write(c: Context, list: List<Transcript>) {
+        withContext(Dispatchers.IO) {
+            val af = file(c)
+            val out = af.startWrite()
+            try {
+                out.write(encode(list).toByteArray(Charsets.UTF_8))
+                af.finishWrite(out)
+            } catch (t: Throwable) {
+                af.failWrite(out)
+                throw t
+            }
+        }
+        cache = list
+    }
+
+    private fun read(c: Context): List<Transcript> {
+        val af = file(c)
+        if (!af.baseFile.exists()) return emptyList()
+        return try {
+            decode(String(af.readFully(), Charsets.UTF_8))
+        } catch (t: Throwable) {
+            // Bozuk dosyayı silme: yedekle, boş listeyle devam et
+            runCatching { af.baseFile.renameTo(File(c.filesDir, "history.corrupt-${System.currentTimeMillis()}.json")) }
+            emptyList()
+        }
+    }
+
+    private fun encode(list: List<Transcript>): String {
+        val arr = JSONArray()
+        list.forEach { tr ->
+            val segs = JSONArray()
+            tr.segments.forEach { s -> segs.put(JSONObject().put("s", s.startMs).put("e", s.endMs).put("t", s.text)) }
+            arr.put(
+                JSONObject().put("id", tr.id).put("fileName", tr.fileName).put("durationMs", tr.durationMs)
+                    .put("language", tr.language).put("processMs", tr.processMs).put("segments", segs)
+                    .put("rev", tr.revision)
+                    .apply { tr.editedText?.let { put("edited", it) } },
+            )
+        }
+        return arr.toString()
+    }
+
+    private fun decode(json: String): List<Transcript> {
+        val arr = JSONArray(json)
+        return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             val segs = o.getJSONArray("segments")
             Transcript(
@@ -60,36 +164,8 @@ object HistoryStore {
                     Segment(s.getLong("s"), s.getLong("e"), s.getString("t"))
                 },
                 editedText = o.optString("edited").ifEmpty { null },
+                revision = o.optInt("rev", 0),
             )
         }
-    }.getOrDefault(emptyList())
-
-    fun remove(c: Context, id: Long): List<Transcript> = save(c, load(c).filter { it.id != id })
-
-    fun clear(c: Context) { file(c).delete() }
-
-    /** "Geri al": silinen kaydı zaman sırasındaki yerine geri koyar. */
-    fun restore(c: Context, t: Transcript): List<Transcript> =
-        save(c, (load(c).filter { it.id != t.id } + t).sortedByDescending { it.id }.take(MAX))
-
-    fun add(c: Context, t: Transcript): List<Transcript> =
-        save(c, (listOf(t) + load(c).filter { it.id != t.id }).take(MAX))
-
-    private fun save(c: Context, list: List<Transcript>): List<Transcript> {
-        val arr = JSONArray()
-        list.forEach { tr ->
-            val segs = JSONArray()
-            tr.segments.forEach { s -> segs.put(JSONObject().put("s", s.startMs).put("e", s.endMs).put("t", s.text)) }
-            arr.put(
-                JSONObject().put("id", tr.id).put("fileName", tr.fileName).put("durationMs", tr.durationMs)
-                    .put("language", tr.language).put("processMs", tr.processMs).put("segments", segs)
-                    .apply { tr.editedText?.let { put("edited", it) } },
-            )
-        }
-        // Atomik yazım: yarıda kesilen yazma geçmişi bozmasın
-        val tmp = File(c.filesDir, "history.json.tmp")
-        tmp.writeText(arr.toString())
-        if (!tmp.renameTo(file(c))) { file(c).writeText(arr.toString()); tmp.delete() }
-        return list
     }
 }

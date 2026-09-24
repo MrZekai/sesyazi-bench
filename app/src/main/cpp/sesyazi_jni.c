@@ -14,6 +14,9 @@
 #define LOGI(...) fprintf(stderr, __VA_ARGS__)
 #endif
 
+/* sesyazi_timings.cpp — whisper_get_timings sonucunu sızdırmadan okur. */
+void sesyazi_read_timings(struct whisper_context *ctx, float out[5]);
+
 #define JNI_FN(name) Java_com_aitolian_sesyazibench_engine_WhisperNative_##name
 
 static int g_backends_loaded = 0;
@@ -67,8 +70,19 @@ JNI_FN(nativeSystemInfo)(JNIEnv *env, jobject thiz) {
 static jbyteArray to_bytes(JNIEnv *env, const char *s) {
     jsize n = (jsize) strlen(s);
     jbyteArray arr = (*env)->NewByteArray(env, n);
+    if (!arr) return NULL; // OutOfMemoryError Java tarafında bekliyor
     (*env)->SetByteArrayRegion(env, arr, 0, n, (const jbyte *) s);
     return arr;
+}
+
+/* Callback içinde Java istisnası olduysa temizle; true => istisna vardı. */
+static int clear_exception(JNIEnv *env) {
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionDescribe(env);
+        (*env)->ExceptionClear(env);
+        return 1;
+    }
+    return 0;
 }
 
 struct progress_ctx {
@@ -77,7 +91,22 @@ struct progress_ctx {
     jmethodID method;       // onProgress(I)V
     jmethodID cancelled;    // isCancelled()Z — bir kez çözülür, her adımda tekrar aranmaz
     jmethodID segment;      // onSegment(JJ[B)V — canlı metin akışı
+    int n_encode;           // encoder kaç kez çalıştı (30 sn'lik pencere sayısı)
 };
+
+/* Her encoder penceresinden önce: sayaç + iptal kontrolü (false => dur). */
+static bool on_encoder_begin(struct whisper_context *ctx, struct whisper_state *state, void *user) {
+    (void) ctx; (void) state;
+    struct progress_ctx *p = (struct progress_ctx *) user;
+    if (!p) return true;
+    p->n_encode++;
+    if (p->listener && p->cancelled) {
+        jboolean c = (*p->env)->CallBooleanMethod(p->env, p->listener, p->cancelled);
+        if (clear_exception(p->env)) return false;
+        return !c;
+    }
+    return true;
+}
 
 /* Yeni cümle(ler) çözüldükçe Kotlin'e anında gönder (metin ekrana akar). */
 static void on_new_segment(struct whisper_context *ctx, struct whisper_state *state, int n_new, void *user) {
@@ -92,9 +121,11 @@ static void on_new_segment(struct whisper_context *ctx, struct whisper_state *st
         jlong t1 = (jlong) whisper_full_get_segment_t1_from_state(state, i) * 10;
         jsize len = (jsize) strlen(text);
         jbyteArray arr = (*p->env)->NewByteArray(p->env, len);
+        if (!arr) { clear_exception(p->env); return; }
         (*p->env)->SetByteArrayRegion(p->env, arr, 0, len, (const jbyte *) text);
         (*p->env)->CallVoidMethod(p->env, p->listener, p->segment, t0, t1, arr);
         (*p->env)->DeleteLocalRef(p->env, arr);
+        if (clear_exception(p->env)) return;
     }
 }
 
@@ -102,14 +133,19 @@ static void on_new_segment(struct whisper_context *ctx, struct whisper_state *st
 static void on_progress(struct whisper_context *ctx, struct whisper_state *state, int progress, void *user) {
     (void) ctx; (void) state;
     struct progress_ctx *p = (struct progress_ctx *) user;
-    if (p && p->listener) (*p->env)->CallVoidMethod(p->env, p->listener, p->method, (jint) progress);
+    if (p && p->listener) {
+        (*p->env)->CallVoidMethod(p->env, p->listener, p->method, (jint) progress);
+        clear_exception(p->env);
+    }
 }
 
 /* Kullanıcı iptal ederse whisper_full erken durur. */
 static bool on_abort(void *user) {
     struct progress_ctx *p = (struct progress_ctx *) user;
     if (!p || !p->listener || !p->cancelled) return false;
-    return (*p->env)->CallBooleanMethod(p->env, p->listener, p->cancelled);
+    jboolean c = (*p->env)->CallBooleanMethod(p->env, p->listener, p->cancelled);
+    if (clear_exception(p->env)) return true; // güvenli taraf: dur
+    return c;
 }
 
 /*
@@ -168,7 +204,8 @@ JNI_FN(nativeDetectLanguage)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArra
  */
 JNIEXPORT jbyteArray JNICALL
 JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pcm,
-                         jstring lang, jint threads, jint beamSize, jstring vadPath, jobject listener) {
+                         jstring lang, jint threads, jint beamSize, jboolean fallback,
+                         jstring vadPath, jobject listener) {
     (void) thiz;
     struct whisper_context *ctx = (struct whisper_context *) (intptr_t) ctxPtr;
     if (!ctx) return to_bytes(env, "ERR\tno_context");
@@ -179,7 +216,7 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
 
     const char *vad = vadPath ? (*env)->GetStringUTFChars(env, vadPath, NULL) : NULL;
 
-    struct progress_ctx pctx = { env, listener, NULL, NULL, NULL };
+    struct progress_ctx pctx = { env, listener, NULL, NULL, NULL, 0 };
     if (listener) {
         jclass cls = (*env)->GetObjectClass(env, listener);
         pctx.method = (*env)->GetMethodID(env, cls, "onProgress", "(I)V");
@@ -193,6 +230,13 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
     struct whisper_full_params p = whisper_full_default_params(
         beamSize > 1 ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
     if (beamSize > 1) p.beam_search.beam_size = beamSize;
+    if (!fallback) {
+        // Varsayılan: sonuç "kötü" görünürse sıcaklığı 0.2 artırıp 5 adayla yeniden
+        // çözer (temperature fallback). Gürültülü seste döküm süresini katlayabilir.
+        p.temperature = 0.0f;
+        p.temperature_inc = 0.0f;
+        p.greedy.best_of = 1;
+    }
     p.print_realtime = false;
     p.print_progress = false;
     p.print_timestamps = false;
@@ -215,6 +259,8 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
         p.vad_params = whisper_vad_default_params();
     }
     p.suppress_nst = true;               // [Müzik], (gülüşmeler) gibi etiketleri bastır
+    p.encoder_begin_callback = on_encoder_begin;
+    p.encoder_begin_callback_user_data = &pctx;
     if (pctx.listener) {
         p.progress_callback = on_progress;
         p.progress_callback_user_data = &pctx;
@@ -224,6 +270,7 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
         p.new_segment_callback_user_data = &pctx;
     }
 
+    whisper_reset_timings(ctx);
     int rc = whisper_full(ctx, p, samples, n);
     (*env)->ReleaseFloatArrayElements(env, pcm, samples, JNI_ABORT);
     if (vad) (*env)->ReleaseStringUTFChars(env, vadPath, vad);
@@ -247,6 +294,14 @@ JNI_FN(nativeTranscribe)(JNIEnv *env, jobject thiz, jlong ctxPtr, jfloatArray pc
     size_t len = 0;
     const char *detected = whisper_lang_str(whisper_full_lang_id(ctx));
     len += snprintf(out + len, cap - len, "LANG\t%s\n", detected ? detected : "?");
+    {
+        // Çağrı başına ortalamalar (ms) + encoder pencere sayısı:
+        // TIME <encoder_ort> <pencere> <decoder_ort> <toplu_decoder_ort> <prompt_ort>
+        float tm[5];
+        sesyazi_read_timings(ctx, tm);
+        len += snprintf(out + len, cap - len, "TIME\t%.1f\t%d\t%.1f\t%.1f\t%.1f\n",
+                        tm[1], pctx.n_encode, tm[2], tm[3], tm[4]);
+    }
     for (int i = 0; i < segs; i++) {
         long long t0 = (long long) whisper_full_get_segment_t0(ctx, i) * 10; // 10 ms birim -> ms
         long long t1 = (long long) whisper_full_get_segment_t1(ctx, i) * 10;

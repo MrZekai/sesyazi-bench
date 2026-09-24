@@ -39,18 +39,18 @@ object AudioDecoder {
      * yapılır; uzun videolarda bile bellek kaynak hızına göre değil 16 kHz'e
      * göre büyür.
      */
-    fun decode(context: Context, uri: Uri): DecodedAudio {
+    fun decode(context: Context, uri: Uri, cancelled: () -> Boolean = { false }): DecodedAudio {
         val extractor = MediaExtractor()
-        context.contentResolver.openFileDescriptor(uri, "r").use { pfd ->
-            if (pfd == null) throw DecodeException("Dosya açılamadı")
-            try {
-                extractor.setDataSource(pfd.fileDescriptor)
-            } catch (t: Throwable) {
-                throw DecodeException("Bu dosya okunamadı (desteklenmeyen biçim)")
-            }
-        }
         var codec: MediaCodec? = null
         try {
+            context.contentResolver.openFileDescriptor(uri, "r").use { pfd ->
+                if (pfd == null) throw DecodeException("Dosya açılamadı")
+                try {
+                    extractor.setDataSource(pfd.fileDescriptor)
+                } catch (t: Throwable) {
+                    throw DecodeException("Bu dosya okunamadı (desteklenmeyen biçim)")
+                }
+            }
             val track = (0 until extractor.trackCount).firstOrNull {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             } ?: throw DecodeException("Bu dosyada ses bulunamadı")
@@ -73,18 +73,29 @@ object AudioDecoder {
             var inRate = format.intOr(MediaFormat.KEY_SAMPLE_RATE, 44_100)
             var channels = format.intOr(MediaFormat.KEY_CHANNEL_COUNT, 1)
             var pcmFloat = false
-            var resampler = StreamResampler(inRate, TARGET_RATE)
+            // Süre biliniyorsa çıktı dizisini baştan doğru boyutta ayır (30 dk seste
+            // ikiye katlanarak büyümek ~135 MB + kopya demekti)
+            val expectedOut = if (format.containsKey(MediaFormat.KEY_DURATION))
+                (format.getLong(MediaFormat.KEY_DURATION) / 1_000_000.0 * TARGET_RATE).toInt() + TARGET_RATE else 0
+            var resampler = StreamResampler(inRate, TARGET_RATE, expectedOut)
             val info = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
             var idleAfterEos = 0
+            var lastProgressAt = android.os.SystemClock.elapsedRealtime()
 
             while (!outputDone) {
+                if (cancelled()) throw DecodeException("İptal edildi")
+                // Girdi/çıktı vermeyen (takılan) çözücü: 20 sn ilerleme yoksa bırak
+                if (android.os.SystemClock.elapsedRealtime() - lastProgressAt > 20_000) {
+                    throw DecodeException("Ses çözülemedi (çözücü yanıt vermiyor)")
+                }
                 if (!inputDone) {
                     val inIdx = codec.dequeueInputBuffer(TIMEOUT_US)
                     if (inIdx >= 0) {
                         val inBuf = codec.getInputBuffer(inIdx)!!
                         val size = extractor.readSampleData(inBuf, 0)
+                        lastProgressAt = android.os.SystemClock.elapsedRealtime()
                         if (size < 0) {
                             codec.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             inputDone = true
@@ -109,6 +120,7 @@ object AudioDecoder {
                     }
                     outIdx >= 0 -> {
                         idleAfterEos = 0
+                        lastProgressAt = android.os.SystemClock.elapsedRealtime()
                         if (info.size > 0) {
                             val out = codec.getOutputBuffer(outIdx)!!.order(ByteOrder.nativeOrder())
                             out.position(info.offset); out.limit(info.offset + info.size)
@@ -127,7 +139,7 @@ object AudioDecoder {
         } finally {
             runCatching { codec?.stop() }
             runCatching { codec?.release() }
-            extractor.release()
+            runCatching { extractor.release() }
         }
     }
 
@@ -160,13 +172,13 @@ object AudioDecoder {
  * uygular — yoksa yüksek frekanslar konuşma bandına katlanır (aliasing) ve
  * tanıma kalitesi düşer. Yukarı örneklemede doğrusal ara değerleme yapar.
  */
-private class StreamResampler(private val from: Int, private val to: Int) {
+private class StreamResampler(private val from: Int, private val to: Int, expectedOut: Int = 0) {
     private val ratio = from.toDouble() / to
     private val half = ratio / 2.0
     private var pending = FloatArray(0)
     private var pendingStart = 0L       // pending[0]'ın küresel indeksi
     private var nextPos = 0.0           // sıradaki çıktının küresel giriş konumu
-    private val out = Growable()
+    private val out = Growable(expectedOut)
 
     val outputSize: Int get() = out.size
 
@@ -184,7 +196,7 @@ private class StreamResampler(private val from: Int, private val to: Int) {
     /** Kodek çıkış hızı değişirse (nadir) biriken sesi bitirip yeni hızla devam et. */
     fun withNewRate(newFrom: Int): StreamResampler {
         drain(final = true)
-        return StreamResampler(newFrom, to).also { it.out.addAll(out.toArray()) }
+        return StreamResampler(newFrom, to, out.capacity).also { it.out.addAll(out.toArray()) }
     }
 
     private fun drain(final: Boolean) {
@@ -219,10 +231,11 @@ private class StreamResampler(private val from: Int, private val to: Int) {
 }
 
 /** Kutulama yapmadan büyüyen float listesi. */
-private class Growable {
-    private var data = FloatArray(1 shl 16)
+private class Growable(initial: Int = 0) {
+    private var data = FloatArray(maxOf(initial, 1 shl 16))
     var size = 0
         private set
+    val capacity: Int get() = data.size
 
     fun add(v: Float) {
         if (size == data.size) data = data.copyOf(size * 2)
@@ -230,5 +243,6 @@ private class Growable {
     }
 
     fun addAll(v: FloatArray) = v.forEach { add(it) }
-    fun toArray(): FloatArray = data.copyOf(size)
+    /** Dizi tam dolmuşsa kopyalamadan verir (uzun seste bellek zirvesini yarıya indirir). */
+    fun toArray(): FloatArray = if (size == data.size) data else data.copyOf(size)
 }

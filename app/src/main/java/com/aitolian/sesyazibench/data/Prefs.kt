@@ -27,6 +27,11 @@ class Prefs(context: Context) {
         get() = p.getInt("reader_font", 19)
         set(v) = p.edit().putInt("reader_font", v).apply()
 
+    /** Geliştirici A/B ölçümü: whisper thread sayısı (0 = otomatik). */
+    var threadOverride: Int
+        get() = p.getInt("threads", 0)
+        set(v) = p.edit().putInt("threads", v).apply()
+
     var devMode: Boolean
         get() = p.getBoolean("dev", false)
         set(v) = p.edit().putBoolean("dev", v).apply()

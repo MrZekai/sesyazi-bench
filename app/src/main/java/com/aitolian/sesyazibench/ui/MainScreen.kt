@@ -53,6 +53,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -98,7 +101,8 @@ fun MainScreen(
     val s by vm.state.collectAsStateWithLifecycle()
     val adsReady by Ads.ready.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var showSettings by remember { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showAllNotes by rememberSaveable { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(vm::onAudio)
     }
@@ -124,9 +128,13 @@ fun MainScreen(
         SettingsScreen(vm, s, onBack = { showSettings = false })
         return
     }
-    // Döküm metni gelmeye başlayınca (ya da bir not açılınca) tam ekran not defteri
-    if (s.result != null || s.live.isNotEmpty()) {
+    // Döküm metni gelmeye başlayınca, yeniden dökümde ya da bir not açılınca: tam ekran not defteri
+    if (s.result != null || s.live.isNotEmpty() || s.previousResult != null) {
         NoteScreen(s, vm, adsReady, onHome = vm::goHome)
+        return
+    }
+    if (showAllNotes) {
+        AllNotesScreen(s, vm, onBack = { showAllNotes = false })
         return
     }
     val canGoHome = !busy && s.phase is Phase.Failed
@@ -144,7 +152,7 @@ fun MainScreen(
             Controls(s, busy, vm)
             Spacer(Modifier.height(14.dp))
             HomeSheet(
-                s, vm, Modifier.weight(1f),
+                s, vm, Modifier.weight(1f), onAllNotes = { showAllNotes = true },
                 guide = { ShareGuide(onOpenWhatsApp = openWhatsApp, onOtherFile = pickOtherFile) },
             )
         }
@@ -164,14 +172,18 @@ private fun TopBar(onHome: (() -> Unit)?, onSettings: () -> Unit) {
         // Sonuç/hata ekranındayken başlangıca (boş ana sayfa) dönüş
         if (onHome != null) {
             Box(
-                Modifier.size(40.dp).clip(CircleShape).background(SY.Card).clickable(onClick = onHome),
+                Modifier.size(44.dp).clip(CircleShape).background(SY.Card)
+                    .clickable(onClickLabel = "Ana sayfa", role = Role.Button, onClick = onHome)
+                    .semantics { contentDescription = "Ana sayfaya dön" },
                 contentAlignment = Alignment.Center,
             ) { Text("⌂", fontSize = 20.sp, color = SY.Text) }
             Spacer(Modifier.width(10.dp))
         }
         Text(stringResource(R.string.app_name), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = SY.Text, modifier = Modifier.weight(1f))
         Box(
-            Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onSettings),
+            Modifier.size(48.dp).clip(CircleShape)
+                .clickable(onClickLabel = "Ayarlar", role = Role.Button, onClick = onSettings)
+                .semantics { contentDescription = "Ayarlar" },
             contentAlignment = Alignment.Center,
         ) { Text("⚙", fontSize = 20.sp, color = SY.Muted) }
     }
@@ -304,6 +316,7 @@ private fun HomeSheet(
     s: MainState,
     vm: MainViewModel,
     modifier: Modifier,
+    onAllNotes: () -> Unit,
     guide: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
@@ -322,7 +335,7 @@ private fun HomeSheet(
         Spacer(Modifier.height(12.dp))
         UndoBar(s, vm)
         // Notlar önce (dönen kullanıcı için), kılavuz altta
-        History(s, vm)
+        History(s, vm, onAllNotes)
         guide()
         Spacer(Modifier.height(8.dp))
     }
@@ -347,7 +360,6 @@ internal fun Waveform(peaks: FloatArray, progress: Float, modifier: Modifier) {
 @Composable
 private fun UndoBar(s: MainState, vm: MainViewModel) {
     val d = s.undoDeleted ?: return
-    LaunchedEffect(d.id) { kotlinx.coroutines.delay(5000); vm.undoExpired() }
     Row(
         Modifier.fillMaxWidth().padding(top = 12.dp).clip(RoundedCornerShape(12.dp)).background(SY.Card)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -363,35 +375,19 @@ private fun UndoBar(s: MainState, vm: MainViewModel) {
 
 
 /** Son notlar: not defteri kartları. Dokun → aç, basılı tut → sil (geri alınabilir). */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun History(s: MainState, vm: MainViewModel) {
-    val items = s.history.take(6)
-    if (items.isEmpty()) return
-    Text(
-        "NOTLARIM", color = SY.Accent, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
-    )
+private fun History(s: MainState, vm: MainViewModel, onAllNotes: () -> Unit) {
+    if (s.history.isEmpty()) return
+    Row(Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("NOTLARIM", color = SY.Accent, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text(
+            "Tümü (${s.history.size}) · Ara ›", color = SY.Accent, fontSize = 12.5.sp,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onAllNotes)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+        )
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.forEach { t ->
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SY.Card)
-                    .combinedClickable(onClick = { vm.openHistory(t) }, onLongClick = { vm.deleteHistory(t) })
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        titleOf(t), color = SY.Text, fontSize = 14.5.sp, fontWeight = FontWeight.Medium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                    )
-                    Text(noteDate(t), color = SY.Muted, fontSize = 11.5.sp, modifier = Modifier.padding(start = 8.dp))
-                }
-                Text(
-                    t.text, color = SY.Muted, fontSize = 12.5.sp, lineHeight = 17.sp, maxLines = 2,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
+        s.history.take(5).forEach { t -> NoteCard(t, onOpen = { vm.openHistory(t) }, onDelete = { vm.deleteHistory(t) }) }
     }
     Text(
         "Silmek için nota basılı tut", fontSize = 11.sp, color = SY.Muted,
@@ -409,8 +405,8 @@ fun Pill(
     onClick: () -> Unit,
 ) {
     Box(
-        modifier.clip(CircleShape).background(bg).clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+        modifier.clip(CircleShape).background(bg).clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Text(
             text, color = fg, fontSize = 13.sp, maxLines = 1,
@@ -423,7 +419,7 @@ private fun langName(code: String) = langOf(code)?.label ?: code
 
 internal fun copyText(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("SesYazı", text))
+    cm.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.app_name), text))
 }
 
 internal fun shareText(context: Context, text: String) {
@@ -431,19 +427,3 @@ internal fun shareText(context: Context, text: String) {
     context.startActivity(Intent.createChooser(i, "Paylaş"))
 }
 
-internal fun shareSrt(context: Context, t: Transcript, segments: List<Segment>, suffix: String) {
-    val dir = File(context.filesDir, "results").apply { mkdirs() }
-    // Dosya adını güvenli karakterlere indir (/, :, * vb. FileProvider'ı çökertiyordu)
-    val safe = t.fileName.substringBeforeLast('.').replace(Regex("[^\\p{L}\\p{N}._ -]"), "_").trim().take(60)
-    val base = safe.ifBlank { "sesyazi" } + suffix
-    val view = t.copy(segments = segments)
-    val srt = File(dir, "$base.srt").apply { writeText(view.toSrt()) }
-    val uri = FileProvider.getUriForFile(context, context.packageName + ".files", srt)
-    val i = Intent(Intent.ACTION_SEND).apply {
-        type = "application/x-subrip"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_TEXT, view.toTxt())
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(i, "SRT / TXT paylaş"))
-}

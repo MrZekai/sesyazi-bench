@@ -15,6 +15,17 @@ data class EngineResult(
     val text: String,
     val segments: List<Segment> = emptyList(),
     val error: String? = null,
+    /** Aşama süreleri (ms) — yalnızca ölçüm; metin içermez. */
+    val detectMs: Long = 0,
+    /** Encoder toplamı (pencere × ortalama). */
+    val encodeMs: Long = 0,
+    /** STT'nin encoder dışındaki kısmı: decoder + VAD + örnekleme. */
+    val decodeMs: Long = 0,
+    /** Native döküm başladıktan sonra ilk cümlenin geldiği an (ms); gelmediyse -1. */
+    val firstSegmentMs: Long = -1,
+    val threads: Int = 0,
+    /** Encoder'ın çalıştığı 30 sn'lik pencere sayısı. */
+    val windows: Int = 0,
 ) {
     /** Gerçek zaman katsayısı: 0.25 => 60 sn ses 15 sn'de bitti. */
     val rtf: Double get() = if (audioMs > 0) transcribeMs.toDouble() / audioMs else 0.0

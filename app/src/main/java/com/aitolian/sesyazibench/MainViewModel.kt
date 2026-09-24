@@ -2,29 +2,31 @@ package com.aitolian.sesyazibench
 
 import android.app.Application
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.audio.AudioDecoder
+import com.aitolian.sesyazibench.audio.DecodeException
 import com.aitolian.sesyazibench.audio.DecodedAudio
 import com.aitolian.sesyazibench.audio.Player
 import com.aitolian.sesyazibench.audio.peaks
+import com.aitolian.sesyazibench.data.Exports
 import com.aitolian.sesyazibench.data.HistoryStore
-import com.aitolian.sesyazibench.data.SpeedStore
 import com.aitolian.sesyazibench.data.Prefs
+import com.aitolian.sesyazibench.data.SpeedStore
 import com.aitolian.sesyazibench.data.Transcript
 import com.aitolian.sesyazibench.engine.EngineResult
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.MlKitEngine
 import com.aitolian.sesyazibench.engine.ModelStore
 import com.aitolian.sesyazibench.engine.OnDeviceTranslator
+import com.aitolian.sesyazibench.engine.Postprocess
 import com.aitolian.sesyazibench.engine.Segment
-import com.aitolian.sesyazibench.engine.langOf
-import com.aitolian.sesyazibench.audio.DecodeException
-import java.util.Locale
 import com.aitolian.sesyazibench.engine.WhisperEngine
 import com.aitolian.sesyazibench.engine.WhisperModel
+import com.aitolian.sesyazibench.engine.langOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -35,12 +37,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Kalite seviyeleri. Hepsi greedy (beam=1): gerçek cihaz testinde beam search +
- * sıcaklık yedeklemesi small modeli 36 sn ses için ~6 dk'ya çıkardı; doğruluk
- * kazancı bu maliyeti karşılamıyor.
+ * Kalite seviyeleri. Hepsi greedy (beam=1). Hızlı ve Dengeli'de sıcaklık
+ * yedeklemesi (fallback) kapalı: tek tur çözme. En iyi'nin arka plan
+ * iyileştirmesinde açık (doğruluk öncelikli, kullanıcı beklemiyor).
  */
 enum class Quality(val label: String, val model: WhisperModel, val beam: Int) {
     FAST("Hızlı", WhisperModel.BASE, 1),
@@ -69,6 +73,8 @@ data class MainState(
     val playing: Boolean = false,
     val positionMs: Long = 0,
     val result: Transcript? = null,
+    /** Yeniden döküm sürerken önceki sonuç: hata/iptalde geri gösterilir. */
+    val previousResult: Transcript? = null,
     val history: List<Transcript> = emptyList(),
     val tab: Tab = Tab.TEXT,
     val translation: List<Segment>? = null,
@@ -84,16 +90,16 @@ data class MainState(
     val refining: String? = null,
     /** Türkçe sonuç Dengeli/Hızlı ile çıktıysa "En iyi ile tekrar dene" önerisi. */
     val suggestBest: Boolean = false,
-    /** Metni zaman damgasız paragraf olarak göster. */
-    val paragraphView: Boolean = false,
-    /** Artınca UI uzun işlem için geçiş reklamı dener (tek seferlik olay sayacı). */
+    /** Artınca UI döküm başı geçiş reklamını dener (tek seferlik olay sayacı). */
     val adRequest: Int = 0,
     /** Ayarlar ekranındaki model indirmeleri (0..1). */
     val modelDownloads: Map<WhisperModel, Float> = emptyMap(),
-    /** Son silinen geçmiş kaydı — "Geri al" için birkaç saniye tutulur. */
+    /** Son silinen not — "Geri al" için 5 sn tutulur. */
     val undoDeleted: Transcript? = null,
-    /** Tam ekran okuma yazı boyutu (sp). */
+    /** Not ekranı yazı boyutu (sp). */
     val readerFont: Int = 19,
+    /** Son dökümün aşama süreleri (geliştirici araçlarında gösterilir). */
+    val lastTiming: String? = null,
 )
 
 /** Çeviri hedefi: telefonun dili; kaynak zaten o dilse İngilizce (kaynak İngilizceyse Türkçe). */
@@ -111,26 +117,61 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(MainState())
     val state: StateFlow<MainState> = _state
 
+    val prefs = Prefs(app)
     private val player = Player()
     private var audio: DecodedAudio? = null
-    private var work: Job? = null
     private var ticker: Job? = null
-    private val cancel = AtomicBoolean(false)
+    private var translateJob: Job? = null
+    private var undoJob: Job? = null
     private var vadTried = false
 
-    val prefs = Prefs(app)
+    // ------------------------------------------------------------------
+    // Oturumlar: her döküm (ve onun En iyi iyileştirmesi) bir oturumdur.
+    // Yeni oturum eskisini iptal eder; iptal edilmiş/eski oturumun hiçbir
+    // geri çağrısı (canlı cümle, ilerleme, sonuç, kayıt) duruma yazamaz.
+    // ------------------------------------------------------------------
+    private class Session(val id: Long) {
+        val cancelled = AtomicBoolean(false)
+        var job: Job? = null
+        val startedAt: Long = SystemClock.elapsedRealtime()
+        @Volatile var firstVisibleAt = 0L
+    }
+
+    private val sessionIds = AtomicLong(0)
+    @Volatile private var session: Session? = null
+
+    private fun Session.alive() = !cancelled.get() && session === this
+
+    /** Yalnızca oturum hâlâ geçerliyse durumu değiştirir (CAS döngüsünde her denemede kontrol). */
+    private inline fun Session.update(crossinline f: (MainState) -> MainState) =
+        _state.update { if (alive()) f(it) else it }
+
+    private fun newSession(): Session {
+        session?.let { cancel(it) }
+        return Session(sessionIds.incrementAndGet()).also { session = it }
+    }
+
+    private fun cancel(s: Session) {
+        s.cancelled.set(true)   // native döküm abort geri çağrısıyla durur
+        s.job?.cancel()         // indirme, bekleme ve kopyalama coroutine iptaliyle durur
+        if (session === s) session = null
+    }
+
+    private fun cancelSession() { session?.let { cancel(it) } }
+
+    val isWorking: Boolean get() = session?.job?.isActive == true
 
     init {
-        // Kayıtlı tercihler; hiç seçilmemişse yavaş telefonda (≤2 güçlü çekirdek) varsayılan Hızlı
         val q = prefs.defaultQuality?.let { n -> Quality.entries.firstOrNull { it.name == n } }
             ?: if (WhisperEngine.threadCount() <= 2) Quality.FAST else Quality.BALANCED
         val l = prefs.defaultLang?.let { langOf(it) } ?: Lang.AUTO
         val target = prefs.translateTarget?.let { langOf(it) }
+        WhisperEngine.threadOverride = prefs.threadOverride
         _state.update {
             it.copy(quality = q, lang = l, translationTarget = target ?: it.translationTarget, readerFont = prefs.readerFont)
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            ModelStore.cleanupLegacy(ctx)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { ModelStore.cleanupLegacy(ctx) }
             val h = HistoryStore.load(ctx)
             _state.update { it.copy(history = h) }
         }
@@ -147,79 +188,137 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(translationTarget = l) }
     }
 
+    fun setThreadOverride(n: Int) {
+        prefs.threadOverride = n
+        WhisperEngine.threadOverride = n
+        toast(if (n == 0) "Thread: otomatik (${WhisperEngine.autoThreads})" else "Thread: $n")
+    }
+
+    fun setReaderFont(sp: Int) {
+        val v = sp.coerceIn(14, 30)
+        prefs.readerFont = v
+        _state.update { it.copy(readerFont = v) }
+    }
+
     fun downloadModel(m: WhisperModel) {
         if (m in state.value.modelDownloads) return
         warnIfMetered(m)
         viewModelScope.launch {
             _state.update { it.copy(modelDownloads = it.modelDownloads + (m to 0f)) }
-            val ok = runCatching {
+            val err = runCatching {
                 ModelStore.download(ctx, m) { p -> _state.update { it.copy(modelDownloads = it.modelDownloads + (m to p)) } }
-            }.isSuccess
-            _state.update { it.copy(modelDownloads = it.modelDownloads - m, toast = if (ok) "${m.approxMb} MB model hazır" else "İndirilemedi, interneti kontrol et") }
+            }.exceptionOrNull()
+            _state.update {
+                it.copy(
+                    modelDownloads = it.modelDownloads - m,
+                    toast = if (err == null) "${m.approxMb} MB model hazır" else "İndirilemedi: ${err.message ?: "interneti kontrol et"}",
+                )
+            }
         }
     }
 
-
     fun setTab(t: Tab) = _state.update { it.copy(tab = t) }
-    fun toggleParagraph() = _state.update { it.copy(paragraphView = !it.paragraphView) }
     fun toastShown() = _state.update { it.copy(toast = null) }
     fun toast(msg: String) = _state.update { it.copy(toast = msg) }
 
-    /** Ses seçildi / paylaşıldı → kopyala, çöz, otomatik yazıya dök. */
+    /** Döküm başı geçiş reklamı hâlâ anlamlı mı? Metin ekrana geldiyse ya da iş bittiyse hayır. */
+    fun adStillWanted(): Boolean {
+        val s = state.value
+        return isWorking && s.result == null && s.live.isEmpty() &&
+            (s.phase is Phase.Transcribing || s.phase is Phase.Preparing || s.phase is Phase.Downloading)
+    }
+
+    // ------------------------------------------------------------------
+    // Yeni ses
+    // ------------------------------------------------------------------
+
+    /** Ses seçildi / paylaşıldı → kopyala, çöz, otomatik yazıya dök. Önceki her işi iptal eder. */
     fun onAudio(uri: Uri) {
-        val prev = work
-        if (prev?.isActive == true) {
-            // Arka plandaki "iyileştirme" turu yeni sesi engellemesin: iptal et, bitmesini bekle
-            if (state.value.refining != null) cancel.set(true)
-            else { toast("Önce mevcut işlem bitsin"); return }
-        }
+        val s = newSession()
+        translateJob?.cancel()
         stopPlayback()
-        work = viewModelScope.launch {
-            prev?.join()
-            _state.update {
-                it.copy(phase = Phase.Preparing("Ses hazırlanıyor…"), result = null, tab = Tab.TEXT, translation = null)
-            }
+        audio = null            // eski ses: yeni dosya başarısız olursa "Tekrar dene" onu dökmesin
+        player.setSource(null)
+        _state.update {
+            it.copy(
+                phase = Phase.Preparing("Ses hazırlanıyor…"), result = null, previousResult = null,
+                fileName = null, audioMs = 0, waveform = FloatArray(0), hasAudio = false, positionMs = 0,
+                live = emptyList(), tab = Tab.TEXT, translation = null, translating = null,
+                refining = null, suggestBest = false, etaSec = null,
+            )
+        }
+        s.job = viewModelScope.launch {
             try {
                 val name = withContext(Dispatchers.IO) { displayName(uri) }
-                val copy = withContext(Dispatchers.IO) { copyToCache(uri, name) }
-                    ?: throw DecodeException("Dosya çok büyük (en fazla ${MAX_FILE_MB} MB)")
-                val decoded = withContext(Dispatchers.IO) { AudioDecoder.decode(ctx, Uri.fromFile(copy)) }
-                if (decoded.samples.isEmpty()) error("Seste okunabilir içerik yok")
+                val copy = withContext(Dispatchers.IO) { copyToCache(uri, name, s) }
+                    ?: throw DecodeException("Dosya çok büyük (en fazla $MAX_FILE_MB MB)")
+                val decoded = withContext(Dispatchers.IO) {
+                    AudioDecoder.decode(ctx, Uri.fromFile(copy)) { !s.alive() }
+                }
+                if (decoded.samples.size < AudioDecoder.TARGET_RATE / 2) {
+                    throw DecodeException("Ses çok kısa (en az yarım saniye olmalı)")
+                }
+                val wave = withContext(Dispatchers.Default) { decoded.peaks() }
+                if (!s.alive()) return@launch
                 audio = decoded
                 player.setSource(copy)
-                _state.update {
-                    it.copy(
-                        fileName = name, audioMs = decoded.durationMs, waveform = decoded.peaks(),
-                        hasAudio = true, positionMs = 0,
-                    )
+                s.update {
+                    it.copy(fileName = name, audioMs = decoded.durationMs, waveform = wave, hasAudio = true, positionMs = 0)
                 }
-                transcribeCurrent()
+                transcribe(s, decoded, importMs = SystemClock.elapsedRealtime() - s.startedAt)
+            } catch (t: CancellationException) {
+                throw t
             } catch (t: DecodeException) {
-                _state.update { it.copy(phase = Phase.Failed(t.message ?: "Ses açılamadı")) }
+                s.update { it.copy(phase = Phase.Failed(t.message ?: "Ses açılamadı")) }
             } catch (t: OutOfMemoryError) {
-                _state.update { it.copy(phase = Phase.Failed("Dosya bu telefon için çok büyük")) }
+                s.update { it.copy(phase = Phase.Failed("Dosya bu telefon için çok büyük")) }
             } catch (t: Throwable) {
-                _state.update { it.copy(phase = Phase.Failed("Ses açılamadı: ${t.message ?: t.javaClass.simpleName}")) }
+                s.update { it.copy(phase = Phase.Failed("Ses açılamadı: ${t.message ?: t.javaClass.simpleName}")) }
             }
         }
     }
 
-    /** Dil veya kalite değişince aynı sesi yeniden dökmek için. */
+    /** Hata ekranındaki "Tekrar dene": elde geçerli bir ses varsa aynı sesi yeniden döker. */
+    fun canRetry() = audio != null
+
+    /**
+     * Aynı sesi (başka dil/kalite ile) yeniden döker. Önceki sonuç
+     * [MainState.previousResult] olarak saklanır; yeni canlı metin görünür,
+     * hata ya da iptalde önceki not geri gelir.
+     */
     fun retranscribe() {
-        val prev = work
-        if (prev?.isActive == true) {
-            // İyileştirme turu sürerken dil/kalite değişirse: turu iptal et, yeni ayarla baştan
-            if (state.value.refining != null) cancelWork() else return
-        }
-        if (audio == null) {
-            if (state.value.result != null) toast("Yeni ayar bir sonraki seste geçerli olacak")
+        val a = audio ?: run {
+            if (state.value.result != null) toast("Bu notun sesi artık yok; yeni ayar bir sonraki seste geçerli olur")
             return
         }
-        work = viewModelScope.launch { prev?.join(); transcribeCurrent() }
+        val s = newSession()
+        translateJob?.cancel()
+        _state.update {
+            it.copy(
+                previousResult = it.result ?: it.previousResult, result = null, live = emptyList(),
+                phase = Phase.Preparing("Hazırlanıyor…"), tab = Tab.TEXT, translation = null, translating = null,
+                refining = null, suggestBest = false,
+            )
+        }
+        s.job = viewModelScope.launch {
+            try {
+                transcribe(s, a, importMs = 0)
+            } catch (t: CancellationException) {
+                throw t
+            } catch (t: Throwable) {
+                fail(s, "Döküm yapılamadı: ${t.message ?: t.javaClass.simpleName}")
+            }
+        }
     }
 
-    /** Hata ekranındaki "Tekrar dene": ses elimizdeyse aynı sesi yeniden döker. */
-    fun canRetry() = audio != null
+    /** Hata: önceki not varsa ona dön (not ekranında kal), yoksa hata ekranı. */
+    private fun fail(s: Session, message: String) {
+        s.update {
+            val prev = it.previousResult
+            if (prev != null) it.copy(result = prev, previousResult = null, phase = Phase.Idle, live = emptyList(), etaSec = null, toast = message)
+            else it.copy(phase = Phase.Failed(message), live = emptyList(), etaSec = null)
+        }
+    }
 
     private suspend fun ensureModel(model: WhisperModel, onProgress: (Float) -> Unit): Boolean {
         if (!vadTried && !ModelStore.vadReady(ctx) && ModelStore.isReady(ctx, model)) {
@@ -230,38 +329,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return try {
             ModelStore.download(ctx, model, onProgress)
             true
+        } catch (t: CancellationException) {
+            throw t
         } catch (t: Throwable) {
             false
         }
     }
 
     /** Tek motor çalıştırması; canlı cümleleri state.live'a akıtır. */
-    private suspend fun runWhisper(a: DecodedAudio, model: WhisperModel, beam: Int, lang: Lang, stream: Boolean): EngineResult {
-        val r = WhisperEngine(ctx, model, beam).transcribe(
+    private suspend fun runWhisper(
+        s: Session, a: DecodedAudio, model: WhisperModel, beam: Int, fallback: Boolean, lang: Lang, stream: Boolean,
+    ): EngineResult {
+        val r = WhisperEngine(ctx, model, beam, fallback).transcribe(
             a, lang,
             onProgress = { p ->
-                _state.update {
+                s.update {
                     if (it.refining != null) it.copy(refining = "✨ En iyi model ile iyileştiriliyor… %$p")
                     else it.copy(phase = Phase.Transcribing(p.coerceIn(0, 100)))
                 }
             },
-            cancel = cancel,
-            onSegment = { seg -> if (stream && !cancel.get()) _state.update { it.copy(live = it.live + seg) } },
+            cancel = s.cancelled,
+            onSegment = { seg ->
+                if (stream) {
+                    if (s.firstVisibleAt == 0L) s.firstVisibleAt = SystemClock.elapsedRealtime()
+                    s.update { it.copy(live = it.live + seg) }
+                }
+            },
         )
         if (r.error == null) SpeedStore.record(ctx, model, r.transcribeMs, a.durationMs)
-        // Test günlüğü (metin içerir) yalnızca geliştirici modunda tutulur
-        if (prefs.devMode) withContext(Dispatchers.IO) { ResultLog.append(ctx, state.value.fileName ?: "?", r) }
         return r
     }
 
-    private suspend fun transcribeCurrent() {
-        val a = audio ?: return
-        val s = state.value
-        val best = s.quality == Quality.BEST
+    private fun logTiming(s: Session, r: EngineResult, mode: String, pass: String, fallback: Boolean, importMs: Long) {
+        val first = if (s.firstVisibleAt > 0) s.firstVisibleAt - s.startedAt else -1L
+        val total = SystemClock.elapsedRealtime() - s.startedAt
+        val line = ResultLog.summary(r, mode, pass, importMs, first, total)
+        _state.update { it.copy(lastTiming = line) }
+        if (prefs.devMode) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { ResultLog.append(ctx, r, mode, pass, fallback, importMs, first, total) }
+            }
+        }
+    }
+
+    private suspend fun transcribe(s: Session, a: DecodedAudio, importMs: Long) {
+        val st = state.value
+        val best = st.quality == Quality.BEST
         // En iyi modda önce önizleme, sonra arka planda turbo ile iyileştirme.
         // Dengeli modeli zaten inmişse önizleme onunla (Hızlı'dan belirgin daha doğru).
         val first = when {
-            !best -> s.quality
+            !best -> st.quality
             ModelStore.isReady(ctx, Quality.BALANCED.model) -> Quality.BALANCED
             else -> Quality.FAST
         }
@@ -269,16 +386,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!ModelStore.isReady(ctx, first.model)) {
             warnIfMetered(first.model)
             val mb = first.model.approxMb
-            _state.update { it.copy(phase = Phase.Downloading(0f, mb)) }
-            if (!ensureModel(first.model) { p -> _state.update { it.copy(phase = Phase.Downloading(p, mb)) } }) {
-                _state.update { it.copy(phase = Phase.Failed("Model indirilemedi. İnterneti kontrol et.")) }
+            s.update { it.copy(phase = Phase.Downloading(0f, mb)) }
+            if (!ensureModel(first.model) { p -> s.update { it.copy(phase = Phase.Downloading(p, mb)) } }) {
+                fail(s, "Model indirilemedi. İnterneti ve boş alanı kontrol et.")
                 return
             }
         } else ensureModel(first.model) {}
+        if (!s.alive()) return
 
-        cancel.set(false)
         val eta = SpeedStore.estimateMs(ctx, first.model, a.durationMs)
-        _state.update {
+        s.update {
             it.copy(
                 phase = Phase.Transcribing(0), live = emptyList(), etaSec = (eta / 1000).toInt(),
                 refining = null, suggestBest = false,
@@ -286,78 +403,90 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 adRequest = it.adRequest + 1,
             )
         }
-        val r = runWhisper(a, first.model, first.beam, s.lang, stream = true)
-        if (r.error != null) {
-            _state.update { it.copy(phase = if (cancel.get()) Phase.Idle else Phase.Failed(r.error), live = emptyList(), etaSec = null) }
+        val r = runWhisper(s, a, first.model, first.beam, fallback = false, lang = st.lang, stream = true)
+        if (!s.alive()) return
+        logTiming(s, r, first.label, if (best) "onizleme" else "tek", fallback = false, importMs = importMs)
+        if (r.error != null) { fail(s, r.error); return }
+        val segs = Postprocess.clean(r.segments)
+        if (segs.isEmpty()) {
+            fail(s, "Konuşma algılanamadı. Seste net konuşma yoksa (ör. müzik) metin çıkmaz.")
             return
         }
-        if (r.segments.isEmpty()) {
-            cancel.set(false)
-            _state.update {
-                it.copy(
-                    phase = Phase.Failed("Konuşma algılanamadı. Seste net konuşma yoksa (ör. müzik) metin çıkmaz."),
-                    live = emptyList(), etaSec = null,
-                )
-            }
-            return
-        }
-        val detected = r.detectedLanguage ?: s.lang.code
-        var t = Transcript(
+        val detected = r.detectedLanguage ?: st.lang.code
+        val t = Transcript(
             id = System.currentTimeMillis(),
-            fileName = s.fileName ?: "ses",
+            fileName = st.fileName ?: state.value.fileName ?: "ses",
             durationMs = a.durationMs,
             language = detected,
             processMs = r.transcribeMs,
-            segments = dedupe(r.segments),
+            segments = segs,
         )
-        var h = withContext(Dispatchers.IO) { HistoryStore.add(ctx, t) }
-        Ads.onTranscriptionDone()
-        _state.update {
+        if (!s.alive()) return
+        val h = HistoryStore.add(ctx, t)
+        s.update {
             it.copy(
-                phase = Phase.Idle, result = t, history = h, live = emptyList(), etaSec = null,
+                phase = Phase.Idle, result = t, previousResult = null, history = h, live = emptyList(), etaSec = null,
                 translation = null, translating = null, translationTarget = targetFor(t.language),
                 refining = if (best) "✨ Önizleme (${first.label}) · En iyi sonuç hazırlanıyor…" else null,
                 suggestBest = !best && detected == Lang.TR.code,
             )
         }
-
-        prefetchDetector(s.lang)
+        prefetchDetector(st.lang)
         if (!best) {
             Notifier.notifyDone(ctx, t.text.take(120))
             return
         }
 
-        // --- İyileştirme turu (En iyi) ---
+        // --- İyileştirme turu (En iyi): kullanıcı önizlemeyi okurken arka planda ---
         if (!ModelStore.isReady(ctx, Quality.BEST.model)) warnIfMetered(Quality.BEST.model)
         val ok = ensureModel(Quality.BEST.model) { p ->
-            _state.update { it.copy(refining = "✨ En iyi model indiriliyor… %${(p * 100).toInt()}") }
+            s.update { it.copy(refining = "✨ En iyi model indiriliyor… %${(p * 100).toInt()}") }
         }
+        if (!s.alive()) return
         if (!ok) {
-            _state.update { it.copy(refining = null, toast = "En iyi model indirilemedi; hızlı sonuç gösteriliyor") }
+            s.update { it.copy(refining = null, toast = "En iyi model indirilemedi; önizleme gösteriliyor") }
             Notifier.notifyDone(ctx, t.text.take(120))
             return
         }
-        _state.update { it.copy(refining = "✨ En iyi model ile iyileştiriliyor… %0") }
+        s.update { it.copy(refining = "✨ En iyi model ile iyileştiriliyor… %0") }
         // Dil önizlemede algılandı; aynı dili zorla ki iki tur tutarlı olsun
-        val refineLang = langOf(detected)?.takeIf { it != Lang.AUTO } ?: s.lang
-        val r2 = runWhisper(a, Quality.BEST.model, Quality.BEST.beam, refineLang, stream = false)
-        if (r2.error != null || r2.segments.isEmpty()) {
-            _state.update { it.copy(refining = null) }
-            if (!cancel.get() && r2.error != null) toast("İyileştirme yapılamadı; hızlı sonuç gösteriliyor")
+        val refineLang = langOf(detected)?.takeIf { it != Lang.AUTO } ?: st.lang
+        val r2 = runWhisper(s, a, Quality.BEST.model, Quality.BEST.beam, fallback = true, lang = refineLang, stream = false)
+        if (!s.alive()) return
+        logTiming(s, r2, Quality.BEST.label, "iyilestirme", fallback = true, importMs = importMs)
+        val refined = Postprocess.clean(r2.segments)
+        if (r2.error != null || refined.isEmpty()) {
+            s.update { it.copy(refining = null, toast = if (r2.error != null) "İyileştirme yapılamadı; önizleme gösteriliyor" else it.toast) }
             Notifier.notifyDone(ctx, t.text.take(120))
             return
         }
-        t = t.copy(segments = dedupe(r2.segments), processMs = r.transcribeMs + r2.transcribeMs)
-        h = withContext(Dispatchers.IO) { HistoryStore.add(ctx, t) }
-        _state.update {
-            if (it.result?.id == t.id) it.copy(result = t, history = h, refining = null, translation = null, toast = "✨ Metin iyileştirildi")
-            else it.copy(history = h, refining = null)
+        // Her zaman diskteki EN GÜNCEL kayıt üzerinden: kullanıcı bu arada düzenlediyse
+        // düzenlemesi korunur; notu sildiyse geri gelmez.
+        val upd = HistoryStore.update(ctx, t.id) { latest ->
+            latest.copy(segments = refined, processMs = r.transcribeMs + r2.transcribeMs)
         }
-        Notifier.notifyDone(ctx, t.text.take(120))
+        if (upd == null) {
+            s.update { it.copy(refining = null) }
+            return
+        }
+        val (h2, nt) = upd
+        s.update {
+            if (it.result?.id == nt.id) it.copy(
+                result = nt, history = h2, refining = null, translation = null, translating = null,
+                toast = if (nt.editedText != null) "✨ İyileştirildi · senin düzenlemen korundu" else "✨ Metin iyileştirildi",
+            ) else it.copy(history = h2, refining = null)
+        }
+        Notifier.notifyDone(ctx, nt.text.take(120))
+    }
+
+    /** Not ekranındaki "En iyi ile dene". */
+    fun rerunWithBest() {
+        setQuality(Quality.BEST)
+        retranscribe()
     }
 
     /**
-     * Otomatik dil seçiliyse küçük base modelini (78 MB) Wi‑Fi'deyken arka planda
+     * Otomatik dil seçiliyse küçük base modelini Wi‑Fi'deyken arka planda
      * indirir: sonraki dökümlerde dil onunla bulunur, büyük model bir kez çalışır.
      */
     private fun prefetchDetector(lang: Lang) {
@@ -367,118 +496,133 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { runCatching { ModelStore.download(ctx, WhisperModel.BASE) {} } }
     }
 
-    /** Not ekranında düzenlenen metni kaydeder (boşsa ham döküme döner). */
-    fun saveEdit(text: String) {
-        val r = state.value.result ?: return
-        val norm = { x: String -> x.replace(Regex("\\s+"), " ").trim() }
-        val edited = text.trim().takeIf { it.isNotEmpty() && norm(it) != norm(r.rawText) }
-        val t = r.copy(editedText = edited)
-        viewModelScope.launch {
-            val h = withContext(Dispatchers.IO) { HistoryStore.add(ctx, t) }
-            _state.update { if (it.result?.id == t.id) it.copy(result = t, history = h, translation = null, toast = "Kaydedildi") else it }
-        }
-    }
-
-    /** Not ekranından çıkış: sürüyorsa işi iptal edip başlangıca döner. */
-    fun goHome() {
-        if (work?.isActive == true && state.value.refining == null) cancel.set(true)
-        clearForNew()
-    }
-
-    fun deleteCurrent() {
-        val r = state.value.result ?: return
-        clearForNew()
-        deleteHistory(r)
-    }
-
-    /** Türkçe öneri kartındaki "En iyi ile tekrar". */
-    fun rerunWithBest() {
-        setQuality(Quality.BEST)
-        retranscribe()
-    }
-
     private fun warnIfMetered(m: WhisperModel) {
         val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java)
         if (cm?.isActiveNetworkMetered == true) toast("Mobil veri ile ${m.approxMb} MB indiriliyor. Wi‑Fi önerilir.")
     }
 
-    // --- Geçmiş ---
+    // ------------------------------------------------------------------
+    // Not işlemleri
+    // ------------------------------------------------------------------
+
+    /** Not ekranında düzenlenen metni kaydeder (ham dökümle aynıysa düzenleme kaldırılır). */
+    fun saveEdit(text: String) {
+        val r = state.value.result ?: return
+        val norm = { x: String -> x.replace(Regex("\\s+"), " ").trim() }
+        val edited = text.trim().takeIf { it.isNotEmpty() && norm(it) != norm(r.rawText) }
+        translateJob?.cancel()
+        viewModelScope.launch {
+            val upd = HistoryStore.update(ctx, r.id) { it.copy(editedText = edited, revision = it.revision + 1) }
+            if (upd == null) { toast("Bu not silinmiş"); return@launch }
+            val (h, nt) = upd
+            _state.update {
+                if (it.result?.id == nt.id) it.copy(result = nt, history = h, translation = null, translating = null, toast = "Kaydedildi")
+                else it.copy(history = h)
+            }
+        }
+    }
+
+    /** Çalışan işi iptal eder. Yeniden döküm iptalinde önceki not geri gelir. */
+    fun cancelWork() {
+        val s = session ?: return
+        cancel(s)
+        _state.update {
+            val prev = it.previousResult
+            when {
+                it.refining != null -> it.copy(refining = null)
+                prev != null -> it.copy(result = prev, previousResult = null, phase = Phase.Idle, live = emptyList(), etaSec = null)
+                else -> it.copy(phase = Phase.Idle, live = emptyList(), etaSec = null)
+            }
+        }
+    }
+
+    /** Başlangıç ekranına dön: çalışan her iş iptal, açık not kapanır. */
+    fun goHome() {
+        cancelSession()
+        clearForNew()
+    }
+
+    fun clearForNew() {
+        cancelSession()
+        translateJob?.cancel()
+        stopPlayback()
+        audio = null
+        player.setSource(null)
+        _state.update {
+            it.copy(
+                result = null, previousResult = null, fileName = null, hasAudio = false, waveform = FloatArray(0),
+                audioMs = 0, phase = Phase.Idle, positionMs = 0, translation = null, translating = null,
+                live = emptyList(), suggestBest = false, refining = null, etaSec = null, tab = Tab.TEXT,
+            )
+        }
+    }
+
+    fun openHistory(t: Transcript) {
+        val s = state.value
+        if (isWorking && s.refining == null) { toast("Önce mevcut işlem bitsin ya da iptal et"); return }
+        clearForNew()
+        _state.update {
+            it.copy(
+                result = t, fileName = t.fileName, audioMs = t.durationMs,
+                translationTarget = targetFor(t.language),
+            )
+        }
+    }
+
+    fun deleteCurrent() {
+        val r = state.value.result ?: return
+        goHome()
+        deleteHistory(r)
+    }
+
     fun deleteHistory(t: Transcript) {
         viewModelScope.launch {
-            val h = withContext(Dispatchers.IO) { HistoryStore.remove(ctx, t.id) }
+            val h = HistoryStore.remove(ctx, t.id)
             _state.update { it.copy(history = h, undoDeleted = t) }
+            // Geri al süresi ekrandan bağımsız: Ayarlar'a gidip dönmek süreyi uzatmaz
+            undoJob?.cancel()
+            undoJob = viewModelScope.launch {
+                delay(5_000)
+                _state.update { if (it.undoDeleted?.id == t.id) it.copy(undoDeleted = null) else it }
+            }
         }
     }
 
     fun undoDelete() {
         val t = state.value.undoDeleted ?: return
+        undoJob?.cancel()
         viewModelScope.launch {
-            val h = withContext(Dispatchers.IO) { HistoryStore.restore(ctx, t) }
+            val h = HistoryStore.restore(ctx, t)
             _state.update { it.copy(history = h, undoDeleted = null) }
         }
     }
 
-    fun undoExpired() = _state.update { it.copy(undoDeleted = null) }
-
-    /** Geçmiş + dışa aktarılan SRT'ler + test günlüğü + önbellekteki ses kopyası silinir. */
+    /** Tüm notlar + dışa aktarılan dosyalar + günlükler + önbellekteki ses silinir; bellekteki durum da. */
     fun clearHistory() {
+        goHome()
+        undoJob?.cancel()
         viewModelScope.launch {
+            HistoryStore.clear(ctx)
             withContext(Dispatchers.IO) {
-                HistoryStore.clear(ctx)
+                Exports.clear(ctx)
                 File(ctx.filesDir, "results").deleteRecursively()
-                ctx.cacheDir.listFiles()?.filter { it.name.startsWith("current_audio") }?.forEach { it.delete() }
+                ctx.cacheDir.listFiles()
+                    ?.filter { it.name.startsWith("current_audio") || it.name == "mlkit_input.pcm" }
+                    ?.forEach { it.delete() }
             }
-            _state.update { it.copy(history = emptyList(), undoDeleted = null, toast = "Geçmiş ve dosyalar temizlendi") }
+            _state.update {
+                it.copy(history = emptyList(), undoDeleted = null, testLog = emptyList(), lastTiming = null, toast = "Tüm notlar ve dosyalar silindi")
+            }
         }
-    }
-
-    fun setReaderFont(sp: Int) {
-        val v = sp.coerceIn(14, 30)
-        prefs.readerFont = v
-        _state.update { it.copy(readerFont = v) }
     }
 
     /** Kayıtlı hedef dil kaynakla aynı değilse onu kullan, değilse akıllı varsayılan. */
     private fun targetFor(source: String): Lang =
         prefs.translateTarget?.let { langOf(it) }?.takeIf { it.code != source } ?: defaultTarget(source)
 
-    fun cancelWork() {
-        cancel.set(true)
-        _state.update { it.copy(refining = null) }
-    }
-
-    fun openHistory(t: Transcript) {
-        if (work?.isActive == true) {
-            if (state.value.refining != null) cancelWork() else return
-        }
-        stopPlayback()
-        audio = null
-        player.setSource(null)
-        _state.update {
-            it.copy(
-                result = t, fileName = t.fileName, audioMs = t.durationMs, hasAudio = false,
-                waveform = FloatArray(0), tab = Tab.TEXT, phase = Phase.Idle, positionMs = 0,
-                translation = null, translating = null, translationTarget = targetFor(t.language),
-                suggestBest = false,
-            )
-        }
-    }
-
-    fun clearForNew() {
-        if (state.value.refining != null) cancelWork()
-        stopPlayback()
-        audio = null
-        player.setSource(null)
-        _state.update {
-            it.copy(
-                result = null, fileName = null, hasAudio = false, waveform = FloatArray(0), phase = Phase.Idle,
-                positionMs = 0, translation = null, translating = null, live = emptyList(), suggestBest = false,
-            )
-        }
-    }
-
-    // --- Çeviri ---
-    private var translateJob: Job? = null
+    // ------------------------------------------------------------------
+    // Çeviri
+    // ------------------------------------------------------------------
 
     /** Çeviri sekmesini açar; henüz çeviri yoksa başlatır. */
     fun openTranslation() {
@@ -487,33 +631,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun translate(target: Lang) {
+        translateJob?.cancel()
         val r = state.value.result ?: return
         val source = langOf(r.language) ?: run { toast("Kaynak dil tanınmadı"); return }
+        // Kullanıcı metni düzelttiyse düzeltilmiş metin çevrilir
+        val input = r.editedText?.let { listOf(Segment(0, r.durationMs, it)) } ?: r.segments
         if (source == target) {
-            _state.update { it.copy(translationTarget = target, translation = r.editedText?.let { e -> listOf(Segment(0, r.durationMs, e)) } ?: r.segments, translating = null) }
+            _state.update { it.copy(translationTarget = target, translation = input, translating = null) }
             return
         }
         if (!OnDeviceTranslator.supports(source)) { toast("${source.label} için çeviri desteklenmiyor"); return }
-        translateJob?.cancel()
         _state.update { it.copy(translationTarget = target, translation = null, translating = "Hazırlanıyor…") }
         translateJob = viewModelScope.launch {
+            fun sameNote(s: MainState) = s.result?.let { it.id == r.id && it.revision == r.revision } == true
             try {
-                // Kullanıcı metni düzelttiyse düzeltilmiş metin çevrilir
-                val input = r.editedText?.let { listOf(Segment(0, r.durationMs, it)) } ?: r.segments
                 val out = OnDeviceTranslator.translate(input, source, target) { msg ->
-                    _state.update { it.copy(translating = msg) }
+                    _state.update { if (sameNote(it)) it.copy(translating = msg) else it }
                 }
-                _state.update { if (it.result?.id == r.id) it.copy(translation = out, translating = null) else it }
+                _state.update { if (sameNote(it)) it.copy(translation = out, translating = null) else it }
+            } catch (t: CancellationException) {
+                _state.update { if (sameNote(it)) it.copy(translating = null) else it }
+                throw t
             } catch (t: Throwable) {
-                if (t is kotlinx.coroutines.CancellationException) throw t
                 _state.update {
-                    it.copy(translating = null, toast = "Çeviri yapılamadı: ${t.message ?: "internet bağlantısını kontrol et"}")
+                    if (sameNote(it)) it.copy(translating = null, toast = "Çeviri yapılamadı: ${t.message ?: "internet bağlantısını kontrol et"}")
+                    else it
                 }
             }
         }
     }
 
-    // --- Oynatıcı ---
+    // ------------------------------------------------------------------
+    // Oynatıcı
+    // ------------------------------------------------------------------
     fun togglePlay() {
         if (!state.value.hasAudio) return
         runCatching {
@@ -525,7 +675,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (playing) ticker = viewModelScope.launch {
             while (isActive && player.isPlaying) {
                 _state.update { it.copy(positionMs = player.positionMs) }
-                delay(120)
+                delay(150)
             }
             _state.update { it.copy(playing = player.isPlaying) }
         }
@@ -542,27 +692,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(playing = false) }
     }
 
-    // --- Test araçları (Ayarlar içinde) ---
+    // ------------------------------------------------------------------
+    // Test araçları (Ayarlar > Geliştirici)
+    // ------------------------------------------------------------------
     fun runMlKitTest(advanced: Boolean) {
-        val a = audio ?: run { toast("Önce bir ses seç"); return }
+        val a = audio ?: run { toast("Önce bir ses dök"); return }
         viewModelScope.launch {
             log("ML Kit ${if (advanced) "ADVANCED" else "BASIC"} çalışıyor…")
             val r = MlKitEngine(ctx, advanced).transcribe(a, state.value.lang)
-            withContext(Dispatchers.IO) { ResultLog.append(ctx, state.value.fileName ?: "?", r) }
             log(describe(r))
         }
     }
 
     fun deviceInfo(): String {
         WhisperEngine.ensureBackends(ctx)
-        return DeviceInfo.summary(ctx) + "\nCPU backend: " + WhisperEngine.backendInfo +
-            "\nwhisper thread: " + WhisperEngine.threadCount()
+        return DeviceInfo.summary(ctx) +
+            "\nCPU backend: " + WhisperEngine.backendInfo +
+            "\nwhisper thread: " + WhisperEngine.threadCount() + " (otomatik " + WhisperEngine.autoThreads + ")" +
+            "\nÇekirdekler: " + WhisperEngine.cpuReport() +
+            "\nggml: " + WhisperEngine.systemInfo()
     }
 
     fun modelReady(m: WhisperModel) = ModelStore.isReady(ctx, m)
 
     fun deleteModel(m: WhisperModel) {
-        ModelStore.file(ctx, m).delete()
+        if (isWorking) { toast("Döküm sürerken model silinemez"); return }
+        WhisperEngine.releaseIfIdle()
+        ModelStore.delete(ctx, m)
         toast("${m.label} silindi")
     }
 
@@ -572,8 +728,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (r.error != null) "${r.engine} ${r.variant}: HATA — ${r.error}"
         else "${r.engine} ${r.variant}: ${"%.1f".format(r.transcribeMs / 1000.0)} sn (RTF ${"%.2f".format(r.rtf)}) — ${r.text.take(80)}"
 
-    /** Önbelleğe kopyalar; [MAX_FILE_MB] aşılırsa kopyayı siler ve null döner. */
-    private fun copyToCache(uri: Uri, name: String): File? {
+    // ------------------------------------------------------------------
+    // Dosya
+    // ------------------------------------------------------------------
+
+    /** Önbelleğe kopyalar; [MAX_FILE_MB] aşılırsa kopyayı siler ve null döner. İptal edilebilir. */
+    private fun copyToCache(uri: Uri, name: String, s: Session): File? {
         val ext = name.substringAfterLast('.', "bin").filter { it.isLetterOrDigit() }.take(5).ifEmpty { "bin" }
         ctx.cacheDir.listFiles()?.filter { it.name.startsWith("current_audio") }?.forEach { it.delete() }
         val out = File(ctx.cacheDir, "current_audio.$ext")
@@ -584,6 +744,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val buf = ByteArray(64 * 1024)
                 var total = 0L
                 while (true) {
+                    if (s.cancelled.get()) throw CancellationException("iptal")
                     val n = input.read(buf)
                     if (n < 0) break
                     total += n
@@ -592,22 +753,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+        if (out.length() == 0L) { out.delete(); throw DecodeException("Dosya boş") }
         return out
     }
 
-    /** Art arda aynı cümleyi (modelin takılması) tek satıra indirir. */
-    private fun dedupe(segs: List<Segment>): List<Segment> =
-        segs.filterIndexed { i, seg -> i == 0 || !seg.text.equals(segs[i - 1].text, ignoreCase = true) }
-
-    private companion object { const val MAX_FILE_MB = 500 }
-
     private fun displayName(uri: Uri): String =
-        ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) c.getString(0) else null
-        } ?: uri.lastPathSegment ?: "ses"
+        runCatching {
+            ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment ?: "ses"
 
     override fun onCleared() {
+        cancelSession()
         player.release()
         super.onCleared()
     }
+
+    private companion object { const val MAX_FILE_MB = 500 }
 }

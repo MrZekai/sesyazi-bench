@@ -61,7 +61,7 @@ if (SESYAZI_OUT_DIR)
     message(STATUS "SesYazi native libs -> ${SESYAZI_OUT_DIR}: ${SESYAZI_ALL_LIBS}")
 endif ()
 
-add_library(sesyazi SHARED sesyazi_jni.c)
+add_library(sesyazi SHARED sesyazi_jni.c sesyazi_timings.cpp)
 target_link_libraries(sesyazi PRIVATE whisper ggml)
 # dlopen ile yüklenen CPU varyantları link bağımlılığı değil; yine de derlensinler
 if (SESYAZI_ALL_LIBS)

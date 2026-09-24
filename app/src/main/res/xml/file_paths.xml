@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- Dışa aktarılan TXT/SRT: önbellekte, her dışa aktarmada eskiler silinir -->
+    <cache-path name="exports" path="exports/" />
+    <!-- Geliştirici araçlarının test günlüğü (CSV) -->
     <files-path name="results" path="results/" />
 </paths>

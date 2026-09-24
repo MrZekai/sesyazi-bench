@@ -6,29 +6,41 @@ import java.io.File
 /** Seçilen sesin kopyasını çalar (paylaşılan URI izni kısa ömürlü olduğu için). */
 class Player {
     private var mp: MediaPlayer? = null
+    /** Oynatıcı henüz hazırlanmadan seçilen konum (satıra dokunma) — ilk Play'de uygulanır. */
+    private var pendingSeekMs = 0L
     var file: File? = null
         private set
 
     fun setSource(f: File?) {
         release()
         file = f
+        pendingSeekMs = 0L
     }
 
     val isPlaying: Boolean get() = runCatching { mp?.isPlaying == true }.getOrDefault(false)
-    val positionMs: Long get() = runCatching { mp?.currentPosition?.toLong() ?: 0L }.getOrDefault(0L)
+    val positionMs: Long get() = runCatching { mp?.currentPosition?.toLong() }.getOrNull() ?: pendingSeekMs
 
     fun toggle(onEnd: () -> Unit) {
         val f = file ?: return
         val p = mp ?: MediaPlayer().also {
-            it.setDataSource(f.absolutePath)
-            it.setOnCompletionListener { onEnd() }
-            it.prepare()
+            try {
+                it.setDataSource(f.absolutePath)
+                it.setOnCompletionListener { onEnd() }
+                it.prepare()
+            } catch (t: Throwable) {
+                it.release()
+                throw t
+            }
+            if (pendingSeekMs > 0) it.seekTo(pendingSeekMs.toInt())
             mp = it
         }
         if (p.isPlaying) p.pause() else p.start()
     }
 
-    fun seekTo(ms: Long) { runCatching { mp?.seekTo(ms.toInt()) } }
+    fun seekTo(ms: Long) {
+        val p = mp
+        if (p == null) pendingSeekMs = ms else runCatching { p.seekTo(ms.toInt()) }
+    }
 
     fun release() {
         runCatching { mp?.release() }
