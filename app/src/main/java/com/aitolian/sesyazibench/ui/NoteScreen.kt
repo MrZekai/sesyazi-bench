@@ -617,9 +617,9 @@ private fun processLine(r: Transcript): String {
         r.quality == com.aitolian.sesyazibench.QUALITY_WIT_MIX && r.previewMs == 0L ->
             "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn · " +
                 (if (r.segments.any { it.text.startsWith("[⚠") }) "bazı bölümler yazıya dökülemedi" else "bazı bölümler telefonda tamamlandı") +
-                " · ses Meta Wit.ai'ye gönderildi"
+                " · Powered by Wit.ai"
         r.quality == com.aitolian.sesyazibench.QUALITY_WIT && r.previewMs == 0L ->
-            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn'de yazıya döküldü · ses Meta Wit.ai'ye gönderildi"
+            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn'de yazıya döküldü · Powered by Wit.ai"
         r.previewMs > 0 -> "✓ Ön izleme ${sec(r.previewMs)} sn · En iyi ${sec(r.processMs)} sn · cihazda yazıya döküldü"
         q != null -> "✓ ${q.label} · ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
         else -> "✓ ${sec(r.processMs)} sn'de cihazda yazıya döküldü"

@@ -65,11 +65,10 @@ fun ShareGuide(onOpenWhatsApp: () -> Unit, onOtherFile: () -> Unit) {
             modifier = Modifier.align(Alignment.CenterHorizontally).clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onOtherFile).padding(8.dp),
         )
-        // Akış içi bilgilendirme (engelleyici değil): ses nereye gidiyor
+        // Rakipteki gibi sade kaynak belirtimi; ayrıntı Ayarlar > Gizlilik ve gizlilik politikasında
         Text(
-            "⚡ Hızlı mod: ses, yazıya dökülmek için Meta Wit.ai'ye gönderilir. İstersen Ayarlar'dan \"Telefonda\"yı seç.",
-            color = SY.Muted, fontSize = 11.5.sp, lineHeight = 15.sp,
-            modifier = Modifier.padding(horizontal = 6.dp),
+            "Powered by Wit.ai", color = SY.Muted, fontSize = 11.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
         )
     }
 }
