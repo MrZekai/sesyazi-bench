@@ -124,9 +124,6 @@ fun MainScreen(
         }
     }
 
-    // İlk kullanımda motor seçimi (Hızlı/Gizli) — hangi ekranda olursa olsun
-    if (s.askEngine) EngineChoiceDialog(onChoose = vm::setEngineMode)
-
     if (showSettings) {
         SettingsScreen(vm, s, onBack = { showSettings = false })
         return
@@ -302,17 +299,6 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
             }
         }
         Spacer(Modifier.width(8.dp))
-        // Motor: Hızlı (internet) / Telefonda. Hızlı modda kalite seçimi gizli
-        // (yalnızca internet yoksa telefonda varsayılan kaliteyle dökülür).
-        if (vm.cloudAvailable) {
-            val fast = s.engineMode == 1
-            Pill(
-                if (fast) "⚡ Hızlı" else "🔒 Telefonda",
-                bg = if (fast) SY.Accent else SY.Chip, fg = if (fast) SY.OnAccent else SY.Text,
-                modifier = Modifier.padding(end = 8.dp),
-                onClick = { if (!busy) vm.setEngineMode(if (fast) 2 else 1) },
-            )
-        }
         if (s.engineMode != 1) Quality.entries.forEach { q ->
             val sel = s.quality == q
             Pill(
@@ -330,31 +316,6 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
     }
 }
 
-/**
- * İlk kullanımda motor seçimi. Hızlı: ses Meta Wit.ai'ye gönderilir (saniyeler).
- * Telefonda: ses cihazdan çıkmaz (daha yavaş). Ayarlar'dan her zaman değişir.
- */
-@Composable
-private fun EngineChoiceDialog(onChoose: (Int) -> Unit) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = {}, // seçim yapılmadan kapanmasın (döküm bu cevabı bekliyor)
-        containerColor = SY.Sheet, titleContentColor = SY.Text, textContentColor = SY.Muted,
-        title = { Text("Nasıl yazıya dökelim?") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("⚡ Hızlı (önerilen): Metin birkaç saniyede hazır. Ses, yazıya dökülmek için internet üzerinden Meta Wit.ai'ye gönderilir.", fontSize = 13.5.sp)
-                Text("🔒 Telefonda: Ses telefonundan hiç çıkmaz, internetsiz çalışır. Uzun seslerde dakikalar sürebilir.", fontSize = 13.5.sp)
-                Text("İnternet olmadığında Hızlı mod da otomatik olarak telefonda çalışır. Tercihini Ayarlar'dan değiştirebilirsin.", fontSize = 12.sp)
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = { onChoose(1) }) { Text("⚡ Hızlı", color = SY.Accent) }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = { onChoose(2) }) { Text("🔒 Telefonda", color = SY.Text) }
-        },
-    )
-}
 
 @Composable
 private fun HomeSheet(

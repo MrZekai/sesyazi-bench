@@ -26,7 +26,6 @@ import com.aitolian.sesyazibench.engine.Segment
 import com.aitolian.sesyazibench.engine.WhisperEngine
 import com.aitolian.sesyazibench.engine.WhisperModel
 import com.aitolian.sesyazibench.engine.WitEngine
-import kotlinx.coroutines.CompletableDeferred
 import com.aitolian.sesyazibench.engine.langOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -106,8 +105,6 @@ data class MainState(
     val livePartial: String? = null,
     /** Motor tercihi: 0 sorulmadı, 1 Hızlı (internet), 2 Gizli (telefonda). */
     val engineMode: Int = 0,
-    /** Motor seçimi penceresi açık mı (ilk kullanımda sorulur). */
-    val askEngine: Boolean = false,
 )
 
 /** Wit.ai ile üretilen notların kalite etiketi. */
@@ -181,7 +178,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 quality = q, lang = l, translationTarget = target ?: it.translationTarget, readerFont = prefs.readerFont,
-                engineMode = if (WitEngine.tokens.isEmpty()) 2 else prefs.engineMode,
+                engineMode = if (WitEngine.tokens.isEmpty()) 2 else prefs.engineMode.takeIf { it != 0 } ?: 1,
             )
         }
         viewModelScope.launch {
@@ -217,28 +214,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------
     // Motor tercihi: Hızlı (internet, Wit.ai) / Gizli (telefonda, Whisper)
     // ------------------------------------------------------------------
-    private var engineAnswer: CompletableDeferred<Int>? = null
-
     /** Hızlı mod bu derlemede kullanılabilir mi (en az bir dil anahtarı var mı)? */
     val cloudAvailable: Boolean get() = WitEngine.tokens.isNotEmpty()
 
     fun setEngineMode(m: Int) {
         prefs.engineMode = m
-        _state.update { it.copy(engineMode = m, askEngine = false) }
-        engineAnswer?.complete(m)
-        engineAnswer = null
+        _state.update { it.copy(engineMode = m) }
         // Hızlı modda dil, küçük modelle telefonda bulunur: Wi‑Fi'deyse şimdiden indir
         if (m == 1) prefetchDetector(Lang.AUTO)
     }
 
-    /** İlk kullanımda motor sorulmadıysa kullanıcıya sorar ve cevabı bekler. */
-    private suspend fun awaitEngineChoice(): Int {
-        if (!cloudAvailable) return 2
-        prefs.engineMode.takeIf { it != 0 }?.let { return it }
-        val d = engineAnswer ?: CompletableDeferred<Int>().also { engineAnswer = it }
-        _state.update { it.copy(askEngine = true) }
-        return d.await()
-    }
+    /**
+     * Uygulama Wit tabanlı: varsayılan her zaman Hızlı mod (sorulmaz).
+     * Kullanıcı Ayarlar'dan "Telefonda"yı seçtiyse (2) yalnızca cihazda çalışır.
+     */
+    private fun engineChoice(): Int = if (!cloudAvailable) 2 else prefs.engineMode.takeIf { it != 0 } ?: 1
 
     private fun online(): Boolean {
         val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java) ?: return false
@@ -468,9 +458,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun transcribe(s: Session, a: DecodedAudio, importMs: Long, forceLocal: Boolean = false) {
         // Hızlı mod: önce internet (Wit.ai); olmazsa aşağıda telefonda devam eder
         if (!forceLocal && cloudAvailable) {
-            val mode = awaitEngineChoice()
-            if (!s.alive()) return
-            if (mode == 1) {
+            if (engineChoice() == 1) {
                 if (!online()) toast("İnternet yok; telefonda yazıya dökülüyor")
                 else if (transcribeCloud(s, a, importMs)) return
                 if (!s.alive()) return
