@@ -487,9 +487,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * tutarlı olsun, ayrıca dil algılama maliyeti olmasın). İptal/hatada mevcut
      * not olduğu gibi kalır; kullanıcı düzenlemesi korunur, silinmiş not geri gelmez.
      */
-    private suspend fun refine(s: Session, a: DecodedAudio, t: Transcript, fallbackLang: Lang, importMs: Long) {
-        val model = modelFor(Quality.BEST)
-        val fallback = fallbackFor(Quality.BEST)
+    private suspend fun refine(
+        s: Session, a: DecodedAudio, t: Transcript, fallbackLang: Lang, importMs: Long,
+        modelOverride: WhisperModel? = null, fallbackOverride: Boolean? = null,
+    ) {
+        // Deney düğmeleri ayarları yalnızca BU tur için verir; kalıcı tercihlere yazmaz
+        val model = modelOverride ?: modelFor(Quality.BEST)
+        val fallback = fallbackOverride ?: fallbackFor(Quality.BEST)
         s.update { it.copy(refining = "✨ En iyi model hazırlanıyor…", suggestBest = false) }
         if (!ModelStore.isReady(ctx, model)) warnIfMetered(model)
         val ok = ensureModel(model) { p ->
@@ -541,18 +545,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * doğrudan mevcut ses üzerinde çalıştırır. Mevcut metin ekranda kalır.
      * Ses artık yoksa (geçmişten açılmış not) çalışmaz.
      */
-    fun refineWithBest() = startBestRefinement(allowExistingBest = false)
+    fun refineWithBest() = startBestRefinement(allowExistingBest = false, model = null, fallback = null)
 
     /** Aynı ses üzerinde q5/q8 ve fallback A/B deneyi; mevcut not korunur. */
     fun rerunBestExperiment(q8: Boolean, fallback: Boolean) {
         if (!prefs.devMode) { toast("Bu işlem için geliştirici modu açık olmalı"); return }
         if (isWorking) { toast("Önce mevcut işlem bitsin ya da iptal et"); return }
-        prefs.turboQ8 = q8
-        prefs.fallbackMode = if (fallback) 1 else 2
-        startBestRefinement(allowExistingBest = true)
+        val model = if (q8) WhisperModel.TURBO_Q8 else WhisperModel.TURBO
+        if (!ModelStore.isReady(ctx, model)) toast("${model.label} indirilecek (${model.approxMb} MB)")
+        startBestRefinement(allowExistingBest = true, model = model, fallback = fallback)
     }
 
-    private fun startBestRefinement(allowExistingBest: Boolean) {
+    private fun startBestRefinement(allowExistingBest: Boolean, model: WhisperModel?, fallback: Boolean?) {
         val a = audio ?: run { toast("Bu notun sesi artık yok; sesi yeniden paylaşman gerekiyor"); return }
         val cur = state.value.result ?: return
         if (!allowExistingBest && cur.quality == Quality.BEST.name) {
@@ -564,7 +568,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(tab = Tab.TEXT, translation = null, translating = null) }
         s.job = viewModelScope.launch {
             try {
-                refine(s, a, cur, fallbackLang = state.value.lang, importMs = 0)
+                refine(s, a, cur, fallbackLang = state.value.lang, importMs = 0, modelOverride = model, fallbackOverride = fallback)
             } catch (t: CancellationException) {
                 throw t
             } catch (t: Throwable) {
