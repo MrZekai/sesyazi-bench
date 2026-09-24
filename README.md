@@ -4,7 +4,7 @@
 
 > 60 saniyelik Türkçe sesli mesaj, orta segment bir telefonda **15 saniyenin altında** okunur metne dönüşüyor mu?
 
-Hepsi cihaz içinde çalışır; backend yok, API anahtarı yok.
+**Güncel mimari (v1.11+):** Yazıya dökme varsayılan olarak **Meta Wit.ai** (ücretsiz, dil başına ayrı Wit uygulaması; anahtarlar GitHub secret `WIT_TOKENS` ile derlemede gelir) üzerinden yapılır — ses Meta'ya gönderilir. İnternet yoksa, anahtar/kota hatasında ya da Ayarlar'da "Telefonda" seçiliyse cihaz içi whisper.cpp kullanılır. Kendi sunucumuz yok.
 
 ## Karşılaştırılan motorlar
 

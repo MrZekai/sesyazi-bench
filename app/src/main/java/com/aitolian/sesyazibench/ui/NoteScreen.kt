@@ -61,6 +61,7 @@ import com.aitolian.sesyazibench.MainViewModel
 import com.aitolian.sesyazibench.Phase
 import com.aitolian.sesyazibench.Quality
 import com.aitolian.sesyazibench.Tab
+import com.aitolian.sesyazibench.isCloud
 import com.aitolian.sesyazibench.ads.BannerAd
 import com.aitolian.sesyazibench.data.Exports
 import com.aitolian.sesyazibench.data.Transcript
@@ -303,7 +304,7 @@ private fun NoteTopBar(
                             onClick = { menu = false; vm.refineWithBest() },
                         )
                     }
-                    if (vm.cloudAvailable && r.quality != com.aitolian.sesyazibench.QUALITY_WIT) {
+                    if (vm.cloudAvailable && !r.isCloud()) {
                         DropdownMenuItem(
                             text = { Text("⚡ Hızlı (internet) ile yeniden dök") },
                             onClick = { menu = false; vm.setEngineMode(1); vm.retranscribe() },
@@ -315,7 +316,7 @@ private fun NoteTopBar(
                             onClick = { menu = false; vm.retranscribeLocal(q) },
                         )
                     }
-                    listOf(Lang.AUTO, Lang.TR, Lang.EN).filter { it.code != r.language && it != s.lang }.forEach { l ->
+                    (listOf(Lang.AUTO) + TRANSLATABLE).filter { it.code != r.language && it != s.lang }.forEach { l ->
                         DropdownMenuItem(
                             text = { Text("Dil: ${l.label} ile yeniden dök") },
                             onClick = { menu = false; vm.retranscribeInLanguage(l) },
@@ -613,8 +614,12 @@ private fun processLine(r: Transcript): String {
     fun sec(ms: Long) = "%.1f".format(tr, ms / 1000.0)
     val q = r.quality?.let { n -> Quality.entries.firstOrNull { it.name == n } }
     return when {
+        r.quality == com.aitolian.sesyazibench.QUALITY_WIT_MIX && r.previewMs == 0L ->
+            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn · " +
+                (if (r.segments.any { it.text.startsWith("[⚠") }) "bazı bölümler yazıya dökülemedi" else "bazı bölümler telefonda tamamlandı") +
+                " · ses Meta Wit.ai'ye gönderildi"
         r.quality == com.aitolian.sesyazibench.QUALITY_WIT && r.previewMs == 0L ->
-            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn'de yazıya döküldü (internet)"
+            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn'de yazıya döküldü · ses Meta Wit.ai'ye gönderildi"
         r.previewMs > 0 -> "✓ Ön izleme ${sec(r.previewMs)} sn · En iyi ${sec(r.processMs)} sn · cihazda yazıya döküldü"
         q != null -> "✓ ${q.label} · ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
         else -> "✓ ${sec(r.processMs)} sn'de cihazda yazıya döküldü"

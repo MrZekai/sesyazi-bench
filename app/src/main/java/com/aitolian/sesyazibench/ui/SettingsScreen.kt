@@ -216,10 +216,13 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
             // --- Gizlilik ---
             Group("Gizlilik") {
                 Text(
-                    (if (s.engineMode == 1) "Hızlı modda ses, yazıya dökülmek için Meta Wit.ai'ye gönderilir; saklamayız. " +
-                        "\"Telefonda\" seçersen ses ve metin telefonundan çıkmaz. "
-                    else "Sesin ve metnin telefonundan çıkmaz; yazıya dökme cihazda yapılır. ") +
-                        "Çeviri cihazda yapılır. Reklamlar Google AdMob tarafından gösterilir.",
+                    (if (s.engineMode == 1) "Hızlı modda ses, yazıya dökülmek için Meta Wit.ai'ye gönderilir. Meta bu " +
+                        "verileri kendi koşulları ve gizlilik politikası kapsamında işler; ses verileri 90 güne kadar " +
+                        "saklanabilir. Bizim bir sunucumuz yok; notların ve sesin geçici kopyası yalnızca telefonunda tutulur. " +
+                        "\"Telefonda\" seçersen ses telefonundan çıkmaz. "
+                    else "Sesin telefonundan çıkmaz; yazıya dökme cihazda yapılır. Notların telefonunda tutulur. ") +
+                        "Çeviri cihazda yapılır. Reklamlar Google AdMob tarafından gösterilir. " +
+                        "Yalnızca yazıya dökme hakkın olan sesleri paylaş.",
                     color = SY.Muted, fontSize = 12.5.sp,
                 )
                 LinkRow("Gizlilik politikası") { openUrl(context, PRIVACY_URL) }
@@ -241,6 +244,11 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                     runCatching { context.startActivity(i) }
                 }
                 LinkRow("Açık kaynak lisansları") { showLicenses = true }
+                Text(
+                    "Bu uygulama WhatsApp veya Meta tarafından geliştirilmemiş, desteklenmemiş veya onaylanmamıştır. " +
+                        "WhatsApp, WhatsApp LLC'nin ticari markasıdır. Hızlı mod, Meta'nın Wit.ai hizmetini kullanır.",
+                    color = SY.Muted, fontSize = 11.5.sp,
+                )
                 LinkRow("Uygulamayı puanla") {
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}"))) }
                         .onFailure { openUrl(context, "https://play.google.com/store/apps/details?id=${context.packageName}") }

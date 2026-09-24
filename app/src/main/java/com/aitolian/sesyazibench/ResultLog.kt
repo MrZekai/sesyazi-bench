@@ -75,6 +75,7 @@ object ResultLog {
         val dil = when (r.detectPath) {
             "base" -> "dil (küçük model) ${s(r.detectMs)}"
             "model_ici" -> "dil: model içinde (STT'ye dahil)"
+            "telefon_dili" -> "dil: algılanamadı, telefonun dili varsayıldı"
             else -> "dil: seçili"
         }
         return "$mode/$pass · ${r.variant} · tekrar deneme ${if (fallback) "açık" else "kapalı"} · ses ${s(r.audioMs)} sn · " +

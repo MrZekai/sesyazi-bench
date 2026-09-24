@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AtomicFile
 import com.aitolian.sesyazibench.engine.Segment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -97,6 +98,10 @@ object HistoryStore {
             File(c.filesDir, "history.json.new").delete()
             File(c.filesDir, "history.json.bak").delete()
             File(c.filesDir, "history.json.tmp").delete() // v1.7-1.8 geçici dosyası
+            // Bozuk dosya yedekleri de kullanıcının notlarıdır: "tümünü sil" bunları da siler
+            c.filesDir.listFiles()
+                ?.filter { it.name.startsWith("history.corrupt-") && it.name.endsWith(".json") }
+                ?.forEach { it.delete() }
         }
         cache = emptyList()
     }
@@ -111,19 +116,23 @@ object HistoryStore {
     private suspend fun current(c: Context): List<Transcript> =
         cache ?: withContext(Dispatchers.IO) { read(c) }.also { cache = it }
 
+    /**
+     * Disk + bellek birlikte ve iptal edilemez şekilde güncellenir: yazım başladıysa
+     * tamamlanır; dosya yeni / bellek eski kalıp sonraki yazımın kayıt düşürmesi olmaz.
+     */
     private suspend fun write(c: Context, list: List<Transcript>) {
-        withContext(Dispatchers.IO) {
+        withContext(NonCancellable + Dispatchers.IO) {
             val af = file(c)
             val out = af.startWrite()
             try {
                 out.write(encode(list).toByteArray(Charsets.UTF_8))
                 af.finishWrite(out)
+                cache = list
             } catch (t: Throwable) {
                 af.failWrite(out)
                 throw t
             }
         }
-        cache = list
     }
 
     private fun read(c: Context): List<Transcript> {

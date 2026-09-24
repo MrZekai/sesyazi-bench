@@ -173,7 +173,10 @@ class WhisperEngine(
                     ensureBackends(context)
                     val d = detectorCtx(context)
                     if (d == 0L) null
-                    else WhisperNative.nativeDetectLanguage(d, audio.samples, threadCount()).takeIf { it != "auto" }
+                    // Yalnızca ilk 30 sn'yi geçir (JNI 30 dk'lık diziyi kopyalamasın)
+                    else WhisperNative.nativeDetectLanguage(
+                        d, audio.samples.copyOfRange(0, minOf(audio.samples.size, 30 * 16_000)), threadCount(),
+                    ).takeIf { it != "auto" }
                 }
             }
 

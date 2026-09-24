@@ -19,6 +19,27 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: WIT_TOKENS doğrula (içerik yazdırılmaz)
+        env:
+          WIT_TOKENS: ${{ secrets.WIT_TOKENS }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          known = set("tr en de fr es it pt ru ar hi id".split())
+          raw = os.environ.get("WIT_TOKENS", "")
+          try:
+              v = json.loads(raw)
+          except ValueError:
+              sys.exit("WIT_TOKENS geçerli JSON değil")
+          if not isinstance(v, dict) or not v:
+              sys.exit("WIT_TOKENS boş ya da nesne değil")
+          bad = [k for k, t in v.items() if k not in known or not isinstance(t, str) or not t.strip() or any(c.isspace() for c in t)]
+          if bad:
+              sys.exit("WIT_TOKENS hatalı girdi: " + ", ".join(sorted(bad)))
+          missing = sorted(known - set(v))
+          print("WIT_TOKENS tamam: %d dil" % len(v) + (" (eksik: " + ", ".join(missing) + ")" if missing else ""))
+          PY
+
       - name: Build release APK (native -O3, debug imzalı)
         env:
           # Hızlı mod anahtarları (Settings → Secrets → Actions → WIT_TOKENS)

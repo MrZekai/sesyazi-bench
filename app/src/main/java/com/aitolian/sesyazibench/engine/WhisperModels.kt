@@ -2,6 +2,7 @@ package com.aitolian.sesyazibench.engine
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -132,8 +133,10 @@ object ModelStore {
         withContext(Dispatchers.IO) {
             val tmp = File(target.path + ".part")
             var conn = open(url)
-            val job = currentCoroutineContext()[Job]
-            val closer = job?.invokeOnCompletion { runCatching { conn.disconnect() } }
+            // İptal anında (engelleyen read sırasında bile) bağlantıyı kapatan bekçi
+            val watch = launch(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                try { awaitCancellation() } finally { runCatching { conn.disconnect() } }
+            }
             try {
                 var expectedSha: String? = null
                 var redirects = 0
@@ -187,7 +190,7 @@ object ModelStore {
                 tmp.delete()
                 throw t
             } finally {
-                closer?.dispose()
+                watch.cancel()
                 runCatching { conn.disconnect() }
             }
         }

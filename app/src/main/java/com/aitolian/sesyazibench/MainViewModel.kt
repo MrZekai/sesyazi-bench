@@ -109,6 +109,11 @@ data class MainState(
 
 /** Wit.ai ile üretilen notların kalite etiketi. */
 const val QUALITY_WIT = "WIT"
+/** Wit + başarısız bölümleri telefonda tamamlanmış (ya da işaretlenmiş) not. */
+const val QUALITY_WIT_MIX = "WIT_MIX"
+
+/** Not internetle (Wit) mi üretildi? */
+fun Transcript.isCloud(): Boolean = quality == QUALITY_WIT || quality == QUALITY_WIT_MIX
 
 /** Çeviri hedefi: telefonun dili; kaynak zaten o dilse İngilizce (kaynak İngilizceyse Türkçe). */
 fun defaultTarget(source: String?): Lang {
@@ -143,6 +148,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         var job: Job? = null
         val startedAt: Long = SystemClock.elapsedRealtime()
         @Volatile var firstVisibleAt = 0L
+        /** Bu oturumda reklam denendi mi (en fazla bir kez). */
+        @Volatile var adRequested = false
     }
 
     private val sessionIds = AtomicLong(0)
@@ -233,7 +240,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun online(): Boolean {
         val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java) ?: return false
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        // VALIDATED: "bağlı ama internet yok" (ör. giriş sayfalı Wi‑Fi) durumunu eler
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     fun downloadModel(m: WhisperModel) {
@@ -260,6 +269,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Döküm başı geçiş reklamı hâlâ anlamlı mı? Metin ekrana geldiyse ya da iş bittiyse hayır. */
     fun adStillWanted(): Boolean {
         val s = state.value
+        val cur = session ?: return false
+        if (cur.firstVisibleAt != 0L || !s.livePartial.isNullOrBlank()) return false
         return isWorking && s.result == null && s.live.isEmpty() &&
             (s.phase is Phase.Transcribing || s.phase is Phase.Preparing || s.phase is Phase.Downloading)
     }
@@ -279,7 +290,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 phase = Phase.Preparing("Ses hazırlanıyor…"), result = null, previousResult = null,
                 fileName = null, audioMs = 0, waveform = FloatArray(0), hasAudio = false, positionMs = 0,
-                live = emptyList(), tab = Tab.TEXT, translation = null, translating = null,
+                live = emptyList(), livePartial = null, tab = Tab.TEXT, translation = null, translating = null,
                 refining = null, suggestBest = false, etaSec = null,
             )
         }
@@ -331,7 +342,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         translateJob?.cancel()
         _state.update {
             it.copy(
-                previousResult = it.result ?: it.previousResult, result = null, live = emptyList(),
+                previousResult = it.result ?: it.previousResult, result = null, live = emptyList(), livePartial = null, etaSec = null,
                 phase = Phase.Preparing("Hazırlanıyor…"), tab = Tab.TEXT, translation = null, translating = null,
                 refining = null, suggestBest = false,
             )
@@ -351,8 +362,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun retranscribeInLanguage(lang: Lang) {
         val st = state.value
         val quality = Quality.entries.firstOrNull { it.name == st.result?.quality } ?: st.quality
+        // Telefonda üretilmiş not telefonda kalır (motor sessizce değişmez)
+        val noteWasLocal = st.result?.let { !it.isCloud() && it.quality != null } == true
         _state.update { it.copy(lang = lang, quality = quality) }
-        retranscribe()
+        retranscribe(forceLocal = noteWasLocal)
     }
 
     /** Not menüsündeki "X kalite ile yeniden dök": her zaman telefonda (Whisper). */
@@ -455,29 +468,58 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /** Telefonda hazır (indirilmiş) en uygun kalite: tercih → Dengeli → Hızlı; hiçbiri yoksa null. */
+    private fun localReadyQuality(pref: Quality): Quality? =
+        listOf(pref, Quality.BALANCED, Quality.FAST).distinct().firstOrNull { ModelStore.isReady(ctx, modelFor(it)) }
+
+    private fun metered(): Boolean =
+        ctx.getSystemService(android.net.ConnectivityManager::class.java)?.isActiveNetworkMetered != false
+
+    /** Oturum başına en fazla bir reklam denemesi; metin görünmeye başladıysa hiç. */
+    private fun requestAd(s: Session) {
+        if (s.adRequested || s.firstVisibleAt != 0L) return
+        s.adRequested = true
+        s.update { it.copy(adRequest = it.adRequest + 1) }
+    }
+
     private suspend fun transcribe(s: Session, a: DecodedAudio, importMs: Long, forceLocal: Boolean = false) {
         // Hızlı mod: önce internet (Wit.ai); olmazsa aşağıda telefonda devam eder
-        if (!forceLocal && cloudAvailable) {
-            if (engineChoice() == 1) {
-                if (!online()) toast("İnternet yok; telefonda yazıya dökülüyor")
-                else if (transcribeCloud(s, a, importMs)) return
-                if (!s.alive()) return
-            }
+        var cloudFailed = false
+        if (!forceLocal && cloudAvailable && engineChoice() == 1) {
+            cloudFailed = !online() || transcribeCloud(s, a, importMs) == CloudResult.FALLBACK
+            if (!cloudFailed || !s.alive()) return
         }
         val st = state.value
-        val best = st.quality == Quality.BEST
+        var best = st.quality == Quality.BEST
+        var first: Quality? = null
+        if (cloudFailed) {
+            // İnternet yolu olmadı: sürpriz büyük indirme başlatma. Telefonda hazır model
+            // varsa onunla; yoksa yalnızca ölçümsüz (Wi‑Fi) ağda indir, değilse açıkça söyle.
+            val ready = localReadyQuality(st.quality)
+            if (ready == null && (!online() || metered())) {
+                fail(
+                    s,
+                    if (!online()) "İnternet yok ve telefonda dil modeli yok. İnternete bağlanıp tekrar dene."
+                    else "İnternetle yazıya dökülemedi. Telefonda dökmek için Wi‑Fi'ye bağlan ya da Ayarlar > Depolama'dan model indir.",
+                )
+                return
+            }
+            first = ready ?: Quality.FAST
+            best = false
+            toast(if (!online()) "İnternet yok; telefonda yazıya dökülüyor" else "İnternetle yapılamadı; telefonda yazıya dökülüyor")
+        }
         // En iyi: varsayılan olarak önce ön izleme (Dengeli hazırsa onunla, değilse Hızlı),
         // sonra arka planda büyük modelle iyileştirme. Deneyde ön izleme kapatılabilir:
         // büyük model doğrudan ve tek tur çalışır.
         val withPreview = best && (!prefs.devMode || prefs.bestPreview)
-        val first = when {
+        val q = first ?: when {
             !best -> st.quality
             !withPreview -> Quality.BEST
             ModelStore.isReady(ctx, Quality.BALANCED.model) -> Quality.BALANCED
             else -> Quality.FAST
         }
-        val firstModel = modelFor(first)
-        val firstFallback = fallbackFor(first)
+        val firstModel = modelFor(q)
+        val firstFallback = fallbackFor(q)
 
         if (!ensureOrFail(s, firstModel)) return
         if (!s.alive()) return
@@ -485,17 +527,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val eta = SpeedStore.estimateMs(ctx, firstModel, a.durationMs)
         s.update {
             it.copy(
-                phase = Phase.Transcribing(0), live = emptyList(), etaSec = (eta / 1000).toInt(),
+                phase = Phase.Transcribing(0), live = emptyList(), livePartial = null, etaSec = (eta / 1000).toInt(),
                 refining = null, suggestBest = false,
-                // Metin ekrana gelmeden önce geçiş reklamı (sınırlar Ads içinde); döküm arkada sürer
-                adRequest = it.adRequest + 1,
             )
         }
-        val r = runWhisper(s, a, firstModel, first.beam, fallback = firstFallback, lang = st.lang, stream = true)
+        // Metin ekrana gelmeden önce geçiş reklamı (oturumda bir kez); döküm arkada sürer
+        requestAd(s)
+        val r = runWhisper(s, a, firstModel, q.beam, fallback = firstFallback, lang = st.lang, stream = true)
         if (!s.alive()) return
         val segs = Postprocess.clean(r.segments)
         logTiming(
-            s, r, first.label, if (withPreview) "onizleme" else "tek", fallback = firstFallback,
+            s, r, q.label, if (cloudFailed) "yedek" else if (withPreview) "onizleme" else "tek", fallback = firstFallback,
             importMs = importMs, cleanCount = segs.size,
         )
         if (r.error != null) { fail(s, r.error); return }
@@ -511,16 +553,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             language = detected,
             processMs = r.transcribeMs,
             segments = segs,
-            quality = first.name,
+            quality = q.name,
         )
         if (!s.alive()) return
         val h = HistoryStore.add(ctx, t)
         s.update {
             it.copy(
-                phase = Phase.Idle, result = t, previousResult = null, history = h, live = emptyList(), etaSec = null,
+                phase = Phase.Idle, result = t, previousResult = null, history = h, live = emptyList(),
+                livePartial = null, etaSec = null,
                 translation = null, translating = null, translationTarget = targetFor(t.language),
-                refining = if (withPreview) "✨ Ön izleme (${first.label}) · En iyi sonuç hazırlanıyor…" else null,
-                suggestBest = first != Quality.BEST && detected == Lang.TR.code,
+                refining = if (withPreview) "✨ Ön izleme (${q.label}) · En iyi sonuç hazırlanıyor…" else null,
+                suggestBest = q != Quality.BEST && detected == Lang.TR.code,
             )
         }
         prefetchDetector(st.lang)
@@ -531,19 +574,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         refine(s, a, t, fallbackLang = st.lang, importMs = importMs)
     }
 
+    private enum class CloudResult { DONE, FALLBACK }
+
     /**
-     * Hızlı mod dökümü. true → iş bitti (başarılı ya da iptal); false → telefonda
-     * (Whisper) devam edilmeli (dil desteklenmiyor, ağ/anahtar/kota hatası, boş sonuç).
+     * Hızlı mod dökümü. DONE → iş bitti (başarılı, iptal ya da kesin "konuşma yok");
+     * FALLBACK → telefonda (Whisper) devam edilmeli (anahtar yok, tüm parçalar başarısız).
+     * Bazı parçalar başarısızsa başarılılar korunur; eksik aralıklar telefonda
+     * tamamlanır (model hazırsa) ya da notta açıkça işaretlenir — eksik metin tam
+     * gibi kaydedilmez.
      */
-    private suspend fun transcribeCloud(s: Session, a: DecodedAudio, importMs: Long): Boolean {
+    private suspend fun transcribeCloud(s: Session, a: DecodedAudio, importMs: Long): CloudResult {
         val st = state.value
-        // Dil: seçiliyse o; otomatikse küçük modelle telefonda bulunur (1-2 sn),
-        // küçük model yoksa telefonun dili (Wit'te varsa), o da yoksa İngilizce.
+        // Dil: seçiliyse o; otomatikse küçük modelle telefonda bulunur. Küçük model
+        // yoksa telefonun dili (Wit'te varsa), o da yoksa İngilizce VARSAYILIR (kullanıcıya söylenir).
         var detectMs = 0L
         var detectPath = "secili"
         var lang = st.lang.takeIf { it != Lang.AUTO }?.code
         if (lang == null) {
-            s.update { it.copy(phase = Phase.Preparing("Dil algılanıyor…")) }
+            s.update { it.copy(phase = Phase.Preparing("Dil algılanıyor…"), livePartial = null) }
             val t0 = SystemClock.elapsedRealtime()
             lang = WhisperEngine.detectLanguage(ctx, a)
             detectMs = SystemClock.elapsedRealtime() - t0
@@ -553,16 +601,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 lang = Locale.getDefault().language.takeIf { WitEngine.supports(it) } ?: "en"
             }
         }
-        if (!s.alive()) return true
-        val wit = WitEngine.forLang(lang) ?: return false // bu dil için anahtar yok → Whisper
+        if (!s.alive()) return CloudResult.DONE
+        val wit = WitEngine.forLang(lang) ?: return CloudResult.FALLBACK // bu dil için anahtar yok
 
         s.update {
             it.copy(
                 phase = Phase.Transcribing(-1), live = emptyList(), livePartial = null, etaSec = null,
-                refining = null, suggestBest = false, adRequest = it.adRequest + 1,
+                refining = null, suggestBest = false,
             )
         }
-        val r = wit.transcribe(
+        requestAd(s)
+        val oc = wit.transcribe(
             a, lang, s.cancelled,
             onPartial = { p ->
                 if (p != null && s.firstVisibleAt == 0L) s.firstVisibleAt = SystemClock.elapsedRealtime()
@@ -572,19 +621,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (s.firstVisibleAt == 0L) s.firstVisibleAt = SystemClock.elapsedRealtime()
                 s.update { it.copy(live = it.live + seg, livePartial = null) }
             },
-        ).copy(detectMs = detectMs, detectPath = detectPath)
-        if (!s.alive()) return true
-        val segs = Postprocess.clean(r.segments)
+        )
+        val r = oc.result.copy(detectMs = detectMs, detectPath = detectPath)
+        if (!s.alive() || r.error == WhisperEngine.CANCELLED) return CloudResult.DONE
+        // Wit çıktısına Whisper'ın "uydurma cümle" filtresi UYGULANMAZ (gerçek konuşmayı silebilir)
+        var segs = r.segments.mapNotNull { seg -> seg.text.trim().takeIf { it.isNotEmpty() }?.let { seg.copy(text = it) } }
         logTiming(s, r, "Hızlı", "internet", fallback = false, importMs = importMs, cleanCount = segs.size)
-        if (r.error == WhisperEngine.CANCELLED) return true
-        if (r.error != null || segs.isEmpty()) {
-            s.update {
-                it.copy(
-                    live = emptyList(), livePartial = null,
-                    toast = if (r.error != null) "İnternetle yapılamadı; telefonda yazıya dökülüyor" else it.toast,
-                )
+
+        // Hiçbir parça başarılı olmadı (ya da anahtar geçersiz) → tamamen telefonda
+        if (r.error != null || oc.authFailed) {
+            s.update { it.copy(live = emptyList(), livePartial = null) }
+            return CloudResult.FALLBACK
+        }
+        var mixed = false
+        if (oc.failed.isNotEmpty()) {
+            mixed = true
+            val q = localReadyQuality(st.quality)
+            val langObj = langOf(lang) ?: Lang.AUTO
+            for (f in oc.failed) {
+                if (!s.alive()) return CloudResult.DONE
+                val fromMs = f.from * 1000L / AudioDecoder.TARGET_RATE
+                val toMs = f.to * 1000L / AudioDecoder.TARGET_RATE
+                var filled: List<Segment>? = null
+                if (q != null) {
+                    val sub = DecodedAudio(a.samples.copyOfRange(f.from, f.to), a.sourceMime, a.sourceRate, a.sourceChannels)
+                    val lr = runWhisper(s, sub, modelFor(q), q.beam, fallbackFor(q), langObj, stream = false)
+                    if (lr.error == null) {
+                        filled = Postprocess.clean(lr.segments).map { it.copy(startMs = it.startMs + fromMs, endMs = it.endMs + fromMs) }
+                    }
+                }
+                segs = segs + (filled ?: listOf(
+                    Segment(fromMs, toMs, "[⚠ ${Transcript.clock(fromMs)}–${Transcript.clock(toMs)} arası yazıya dökülemedi]"),
+                ))
             }
-            return false
+            segs = segs.sortedBy { it.startMs }
+        }
+        if (!s.alive()) return CloudResult.DONE
+        if (segs.isEmpty()) {
+            // Dil tahmin edildiyse yanlış dilin Wit uygulamasına gitmiş olabilir → telefonda dene
+            if (detectPath == "telefon_dili") return CloudResult.FALLBACK
+            // Yeniden dökümde önceki not korunur (fail önceki nota döner)
+            fail(s, "Konuşma algılanamadı. Seste net konuşma yoksa (ör. müzik) metin çıkmaz.")
+            return CloudResult.DONE
         }
         val t = Transcript(
             id = System.currentTimeMillis(),
@@ -593,19 +671,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             language = lang,
             processMs = r.transcribeMs,
             segments = segs,
-            quality = QUALITY_WIT,
+            quality = if (mixed) QUALITY_WIT_MIX else QUALITY_WIT,
         )
-        if (!s.alive()) return true
+        if (!s.alive()) return CloudResult.DONE
         val h = HistoryStore.add(ctx, t)
+        val note = when {
+            mixed && segs.any { it.text.startsWith("[⚠") } -> "Bazı bölümler yazıya dökülemedi; notta işaretlendi"
+            mixed -> "Bir bölüm internetle dökülemedi; telefonda tamamlandı"
+            detectPath == "telefon_dili" ->
+                "Dil algılanamadı; ${langOf(lang)?.label ?: lang} varsayıldı. Yanlışsa ⋮ menüsünden dili değiştir."
+            else -> null
+        }
         s.update {
             it.copy(
                 phase = Phase.Idle, result = t, previousResult = null, history = h, live = emptyList(),
                 livePartial = null, etaSec = null, translation = null, translating = null,
                 translationTarget = targetFor(t.language), refining = null, suggestBest = false,
+                toast = note ?: it.toast,
             )
         }
         Notifier.notifyDone(ctx, t.text.take(120))
-        return true
+        return CloudResult.DONE
     }
 
     /**
@@ -783,6 +869,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         stopPlayback()
         audio = null
         player.setSource(null)
+        // Not kapanınca sesin geçici kopyası da silinir (yalnızca gerektiği kadar tutulur)
+        runCatching { ctx.cacheDir.listFiles()?.filter { it.name.startsWith("current_audio") }?.forEach { it.delete() } }
         _state.update {
             it.copy(
                 result = null, previousResult = null, fileName = null, hasAudio = false, waveform = FloatArray(0),
