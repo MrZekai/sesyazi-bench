@@ -18,6 +18,11 @@ android {
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "0.1.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
 
+        // Hızlı mod (Wit.ai) dil → anahtar eşlemesi: GitHub secret WIT_TOKENS (JSON).
+        // Yoksa boş; uygulama yalnızca telefonda (Whisper) çalışır.
+        val witTokens = (System.getenv("WIT_TOKENS") ?: project.findProperty("witTokens") as String? ?: "{}").replace("\r", " ").replace("\n", " ").trim()
+        buildConfigField("String", "WIT_TOKENS", "\"" + witTokens.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
+
         ndk {
             // Benchmark için yalnızca gerçek telefon mimarisi
             abiFilters += listOf("arm64-v8a")
@@ -48,7 +53,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     // ggml CPU varyantları dlopen ile yüklenir → .so dosyaları diske çıkarılmalı
     packaging { jniLibs { useLegacyPackaging = true } }
 }

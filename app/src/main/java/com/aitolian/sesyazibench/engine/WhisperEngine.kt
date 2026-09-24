@@ -162,6 +162,22 @@ class WhisperEngine(
         fun systemInfo(): String = runCatching { WhisperNative.nativeSystemInfo() }.getOrDefault("-")
 
         /**
+         * Yalnızca dil algılama (küçük base modeliyle, izin verilen diller arasından).
+         * Hızlı modda sesin hangi dilin Wit uygulamasına gideceğini seçmek için.
+         * Base modeli yoksa null döner.
+         */
+        suspend fun detectLanguage(context: Context, audio: DecodedAudio): String? =
+            withContext(Dispatchers.Default) {
+                if (!ModelStore.isReady(context, WhisperModel.BASE)) return@withContext null
+                lock.withLock {
+                    ensureBackends(context)
+                    val d = detectorCtx(context)
+                    if (d == 0L) null
+                    else WhisperNative.nativeDetectLanguage(d, audio.samples, threadCount()).takeIf { it != "auto" }
+                }
+            }
+
+        /**
          * Uygulama arka plana geçince modelleri bellekten boşalt (~200-900 MB).
          * Döküm sürüyorsa kilidi alamaz ve bir şey yapmaz.
          */

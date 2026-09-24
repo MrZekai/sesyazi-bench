@@ -140,7 +140,7 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                 .clip(RoundedCornerShape(20.dp)).background(SY.Sheet)
                 .border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(20.dp)),
         ) {
-            if (r == null) LiveText(liveParas, font) else when {
+            if (r == null) LiveText(liveParas, s.livePartial, font) else when {
                 editing -> BasicTextField(
                     value = draft, onValueChange = { draft = it },
                     textStyle = TextStyle(color = SY.Text, fontSize = font.sp, lineHeight = (font * 1.55f).sp),
@@ -303,10 +303,16 @@ private fun NoteTopBar(
                             onClick = { menu = false; vm.refineWithBest() },
                         )
                     }
+                    if (vm.cloudAvailable && r.quality != com.aitolian.sesyazibench.QUALITY_WIT) {
+                        DropdownMenuItem(
+                            text = { Text("⚡ Hızlı (internet) ile yeniden dök") },
+                            onClick = { menu = false; vm.setEngineMode(1); vm.retranscribe() },
+                        )
+                    }
                     Quality.entries.filter { it != Quality.BEST && it.name != r.quality }.forEach { q ->
                         DropdownMenuItem(
-                            text = { Text("${q.label} kalite ile yeniden dök") },
-                            onClick = { menu = false; vm.setQuality(q); vm.retranscribe() },
+                            text = { Text("${q.label} kalite ile telefonda yeniden dök") },
+                            onClick = { menu = false; vm.retranscribeLocal(q) },
                         )
                     }
                     listOf(Lang.AUTO, Lang.TR, Lang.EN).filter { it.code != r.language && it != s.lang }.forEach { l ->
@@ -353,12 +359,12 @@ private fun LiveBar(percent: Int, eta: Int?, onCancel: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(SY.A2))
             Text(
-                "Canlı · %$percent" + (eta?.let { " · ~$it sn" } ?: ""),
+                if (percent < 0) "Canlı · ⚡ Hızlı mod" else "Canlı · %$percent" + (eta?.let { " · ~$it sn" } ?: ""),
                 color = SY.Muted, fontSize = 12.sp, modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             CancelText(onCancel)
         }
-        ProgressLine(percent / 100f)
+        if (percent >= 0) ProgressLine(percent / 100f)
     }
 }
 
@@ -432,12 +438,16 @@ private fun NoteTabs(tab: Tab, onTab: (Tab) -> Unit) {
 }
 
 @Composable
-private fun LiveText(paras: List<String>, font: Int) {
+private fun LiveText(paras: List<String>, partial: String?, font: Int) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        if (paras.isEmpty()) {
+        if (paras.isEmpty() && partial == null) {
             Text("Metin birazdan burada belirecek…", color = SY.Muted, fontSize = font.sp)
         } else {
-            PaperText(paras, font)
+            if (paras.isNotEmpty()) PaperText(paras, font)
+            // Hızlı modun henüz kesinleşmemiş ara metni: kelime kelime belirir
+            if (partial != null) {
+                Text(partial, color = SY.Text.copy(alpha = .7f), fontSize = font.sp, lineHeight = (font * 1.55f).sp)
+            }
             Text("▍", color = SY.Accent, fontSize = font.sp)
         }
     }
@@ -603,6 +613,8 @@ private fun processLine(r: Transcript): String {
     fun sec(ms: Long) = "%.1f".format(tr, ms / 1000.0)
     val q = r.quality?.let { n -> Quality.entries.firstOrNull { it.name == n } }
     return when {
+        r.quality == com.aitolian.sesyazibench.QUALITY_WIT && r.previewMs == 0L ->
+            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn'de yazıya döküldü (internet)"
         r.previewMs > 0 -> "✓ Ön izleme ${sec(r.previewMs)} sn · En iyi ${sec(r.processMs)} sn · cihazda yazıya döküldü"
         q != null -> "✓ ${q.label} · ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
         else -> "✓ ${sec(r.processMs)} sn'de cihazda yazıya döküldü"

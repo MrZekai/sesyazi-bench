@@ -54,6 +54,14 @@ class Prefs(context: Context) {
             .apply()
     }
 
+    /**
+     * Yazıya dökme motoru: 0 = henüz sorulmadı, 1 = Hızlı (internet, Wit.ai;
+     * olmazsa telefonda), 2 = Gizli (yalnızca telefonda).
+     */
+    var engineMode: Int
+        get() = p.getInt("engine_mode", 0)
+        set(v) = p.edit().putInt("engine_mode", v).apply()
+
     var devMode: Boolean
         get() = p.getBoolean("dev", false)
         set(v) = p.edit().putBoolean("dev", v).apply()

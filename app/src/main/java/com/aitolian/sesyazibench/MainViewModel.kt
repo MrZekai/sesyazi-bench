@@ -25,6 +25,8 @@ import com.aitolian.sesyazibench.engine.Postprocess
 import com.aitolian.sesyazibench.engine.Segment
 import com.aitolian.sesyazibench.engine.WhisperEngine
 import com.aitolian.sesyazibench.engine.WhisperModel
+import com.aitolian.sesyazibench.engine.WitEngine
+import kotlinx.coroutines.CompletableDeferred
 import com.aitolian.sesyazibench.engine.langOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -100,7 +102,16 @@ data class MainState(
     val readerFont: Int = 19,
     /** Son dökümün aşama süreleri (geliştirici araçlarında gösterilir). */
     val lastTiming: String? = null,
+    /** Hızlı modda henüz kesinleşmemiş canlı ara metin (kelime kelime). */
+    val livePartial: String? = null,
+    /** Motor tercihi: 0 sorulmadı, 1 Hızlı (internet), 2 Gizli (telefonda). */
+    val engineMode: Int = 0,
+    /** Motor seçimi penceresi açık mı (ilk kullanımda sorulur). */
+    val askEngine: Boolean = false,
 )
+
+/** Wit.ai ile üretilen notların kalite etiketi. */
+const val QUALITY_WIT = "WIT"
 
 /** Çeviri hedefi: telefonun dili; kaynak zaten o dilse İngilizce (kaynak İngilizceyse Türkçe). */
 fun defaultTarget(source: String?): Lang {
@@ -168,7 +179,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val target = prefs.translateTarget?.let { langOf(it) }
         WhisperEngine.threadOverride = if (prefs.devMode) prefs.threadOverride else 0
         _state.update {
-            it.copy(quality = q, lang = l, translationTarget = target ?: it.translationTarget, readerFont = prefs.readerFont)
+            it.copy(
+                quality = q, lang = l, translationTarget = target ?: it.translationTarget, readerFont = prefs.readerFont,
+                engineMode = if (WitEngine.tokens.isEmpty()) 2 else prefs.engineMode,
+            )
         }
         viewModelScope.launch {
             withContext(Dispatchers.IO) { ModelStore.cleanupLegacy(ctx) }
@@ -198,6 +212,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val v = sp.coerceIn(14, 30)
         prefs.readerFont = v
         _state.update { it.copy(readerFont = v) }
+    }
+
+    // ------------------------------------------------------------------
+    // Motor tercihi: Hızlı (internet, Wit.ai) / Gizli (telefonda, Whisper)
+    // ------------------------------------------------------------------
+    private var engineAnswer: CompletableDeferred<Int>? = null
+
+    /** Hızlı mod bu derlemede kullanılabilir mi (en az bir dil anahtarı var mı)? */
+    val cloudAvailable: Boolean get() = WitEngine.tokens.isNotEmpty()
+
+    fun setEngineMode(m: Int) {
+        prefs.engineMode = m
+        _state.update { it.copy(engineMode = m, askEngine = false) }
+        engineAnswer?.complete(m)
+        engineAnswer = null
+        // Hızlı modda dil, küçük modelle telefonda bulunur: Wi‑Fi'deyse şimdiden indir
+        if (m == 1) prefetchDetector(Lang.AUTO)
+    }
+
+    /** İlk kullanımda motor sorulmadıysa kullanıcıya sorar ve cevabı bekler. */
+    private suspend fun awaitEngineChoice(): Int {
+        if (!cloudAvailable) return 2
+        prefs.engineMode.takeIf { it != 0 }?.let { return it }
+        val d = engineAnswer ?: CompletableDeferred<Int>().also { engineAnswer = it }
+        _state.update { it.copy(askEngine = true) }
+        return d.await()
+    }
+
+    private fun online(): Boolean {
+        val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java) ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     fun downloadModel(m: WhisperModel) {
@@ -286,7 +332,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * [MainState.previousResult] olarak saklanır; yeni canlı metin görünür,
      * hata ya da iptalde önceki not geri gelir.
      */
-    fun retranscribe() {
+    fun retranscribe(forceLocal: Boolean = false) {
         val a = audio ?: run {
             if (state.value.result != null) toast("Bu notun sesi artık yok; yeni ayar bir sonraki seste geçerli olur")
             return
@@ -302,7 +348,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         s.job = viewModelScope.launch {
             try {
-                transcribe(s, a, importMs = 0)
+                transcribe(s, a, importMs = 0, forceLocal = forceLocal)
             } catch (t: CancellationException) {
                 throw t
             } catch (t: Throwable) {
@@ -319,12 +365,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         retranscribe()
     }
 
+    /** Not menüsündeki "X kalite ile yeniden dök": her zaman telefonda (Whisper). */
+    fun retranscribeLocal(q: Quality) {
+        setQuality(q)
+        retranscribe(forceLocal = true)
+    }
+
     /** Hata: önceki not varsa ona dön (not ekranında kal), yoksa hata ekranı. */
     private fun fail(s: Session, message: String) {
         s.update {
             val prev = it.previousResult
-            if (prev != null) it.copy(result = prev, previousResult = null, phase = Phase.Idle, live = emptyList(), etaSec = null, toast = message)
-            else it.copy(phase = Phase.Failed(message), live = emptyList(), etaSec = null)
+            if (prev != null) it.copy(result = prev, previousResult = null, phase = Phase.Idle, live = emptyList(), livePartial = null, etaSec = null, toast = message)
+            else it.copy(phase = Phase.Failed(message), live = emptyList(), livePartial = null, etaSec = null)
         }
     }
 
@@ -413,7 +465,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    private suspend fun transcribe(s: Session, a: DecodedAudio, importMs: Long) {
+    private suspend fun transcribe(s: Session, a: DecodedAudio, importMs: Long, forceLocal: Boolean = false) {
+        // Hızlı mod: önce internet (Wit.ai); olmazsa aşağıda telefonda devam eder
+        if (!forceLocal && cloudAvailable) {
+            val mode = awaitEngineChoice()
+            if (!s.alive()) return
+            if (mode == 1) {
+                if (!online()) toast("İnternet yok; telefonda yazıya dökülüyor")
+                else if (transcribeCloud(s, a, importMs)) return
+                if (!s.alive()) return
+            }
+        }
         val st = state.value
         val best = st.quality == Quality.BEST
         // En iyi: varsayılan olarak önce ön izleme (Dengeli hazırsa onunla, değilse Hızlı),
@@ -479,6 +541,83 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         refine(s, a, t, fallbackLang = st.lang, importMs = importMs)
+    }
+
+    /**
+     * Hızlı mod dökümü. true → iş bitti (başarılı ya da iptal); false → telefonda
+     * (Whisper) devam edilmeli (dil desteklenmiyor, ağ/anahtar/kota hatası, boş sonuç).
+     */
+    private suspend fun transcribeCloud(s: Session, a: DecodedAudio, importMs: Long): Boolean {
+        val st = state.value
+        // Dil: seçiliyse o; otomatikse küçük modelle telefonda bulunur (1-2 sn),
+        // küçük model yoksa telefonun dili (Wit'te varsa), o da yoksa İngilizce.
+        var detectMs = 0L
+        var detectPath = "secili"
+        var lang = st.lang.takeIf { it != Lang.AUTO }?.code
+        if (lang == null) {
+            s.update { it.copy(phase = Phase.Preparing("Dil algılanıyor…")) }
+            val t0 = SystemClock.elapsedRealtime()
+            lang = WhisperEngine.detectLanguage(ctx, a)
+            detectMs = SystemClock.elapsedRealtime() - t0
+            detectPath = if (lang != null) "base" else "telefon_dili"
+            if (lang == null) {
+                prefetchDetector(Lang.AUTO)
+                lang = Locale.getDefault().language.takeIf { WitEngine.supports(it) } ?: "en"
+            }
+        }
+        if (!s.alive()) return true
+        val wit = WitEngine.forLang(lang) ?: return false // bu dil için anahtar yok → Whisper
+
+        s.update {
+            it.copy(
+                phase = Phase.Transcribing(-1), live = emptyList(), livePartial = null, etaSec = null,
+                refining = null, suggestBest = false, adRequest = it.adRequest + 1,
+            )
+        }
+        val r = wit.transcribe(
+            a, lang, s.cancelled,
+            onPartial = { p ->
+                if (p != null && s.firstVisibleAt == 0L) s.firstVisibleAt = SystemClock.elapsedRealtime()
+                s.update { it.copy(livePartial = p) }
+            },
+            onSegment = { seg ->
+                if (s.firstVisibleAt == 0L) s.firstVisibleAt = SystemClock.elapsedRealtime()
+                s.update { it.copy(live = it.live + seg, livePartial = null) }
+            },
+        ).copy(detectMs = detectMs, detectPath = detectPath)
+        if (!s.alive()) return true
+        val segs = Postprocess.clean(r.segments)
+        logTiming(s, r, "Hızlı", "internet", fallback = false, importMs = importMs, cleanCount = segs.size)
+        if (r.error == WhisperEngine.CANCELLED) return true
+        if (r.error != null || segs.isEmpty()) {
+            s.update {
+                it.copy(
+                    live = emptyList(), livePartial = null,
+                    toast = if (r.error != null) "İnternetle yapılamadı; telefonda yazıya dökülüyor" else it.toast,
+                )
+            }
+            return false
+        }
+        val t = Transcript(
+            id = System.currentTimeMillis(),
+            fileName = st.fileName ?: state.value.fileName ?: "ses",
+            durationMs = a.durationMs,
+            language = lang,
+            processMs = r.transcribeMs,
+            segments = segs,
+            quality = QUALITY_WIT,
+        )
+        if (!s.alive()) return true
+        val h = HistoryStore.add(ctx, t)
+        s.update {
+            it.copy(
+                phase = Phase.Idle, result = t, previousResult = null, history = h, live = emptyList(),
+                livePartial = null, etaSec = null, translation = null, translating = null,
+                translationTarget = targetFor(t.language), refining = null, suggestBest = false,
+            )
+        }
+        Notifier.notifyDone(ctx, t.text.take(120))
+        return true
     }
 
     /**
@@ -638,8 +777,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val prev = it.previousResult
             when {
                 it.refining != null -> it.copy(refining = null)
-                prev != null -> it.copy(result = prev, previousResult = null, phase = Phase.Idle, live = emptyList(), etaSec = null)
-                else -> it.copy(phase = Phase.Idle, live = emptyList(), etaSec = null)
+                prev != null -> it.copy(result = prev, previousResult = null, phase = Phase.Idle, live = emptyList(), livePartial = null, etaSec = null)
+                else -> it.copy(phase = Phase.Idle, live = emptyList(), livePartial = null, etaSec = null)
             }
         }
     }
@@ -660,7 +799,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 result = null, previousResult = null, fileName = null, hasAudio = false, waveform = FloatArray(0),
                 audioMs = 0, phase = Phase.Idle, positionMs = 0, translation = null, translating = null,
-                live = emptyList(), suggestBest = false, refining = null, etaSec = null, tab = Tab.TEXT,
+                live = emptyList(), livePartial = null, suggestBest = false, refining = null, etaSec = null, tab = Tab.TEXT,
             )
         }
     }

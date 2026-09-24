@@ -114,9 +114,34 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
         ) {
             // --- Transkript ---
             Group("Transkript") {
+                if (vm.cloudAvailable) {
+                    Text("Yazıya dökme yöntemi", color = SY.Text, fontSize = 14.5.sp)
+                    listOf(
+                        1 to ("⚡ Hızlı (internet)" to "Birkaç saniye. Ses, yazıya dökülmek için Meta Wit.ai'ye gönderilir. İnternet yoksa telefonda çalışır."),
+                        2 to ("🔒 Telefonda" to "Ses telefonundan hiç çıkmaz, internetsiz. Uzun seslerde yavaş."),
+                    ).forEach { (m, texts) ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { vm.setEngineMode(m) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = s.engineMode == m, onClick = { vm.setEngineMode(m) },
+                                colors = RadioButtonDefaults.colors(selectedColor = SY.Accent, unselectedColor = SY.Muted),
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(texts.first, color = SY.Text, fontSize = 14.sp)
+                                Text(texts.second, color = SY.Muted, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    Divider()
+                }
                 LangRow("Varsayılan konuşma dili", s.lang, listOf(Lang.AUTO) + TRANSLATABLE, vm::setDefaultLang)
                 Divider()
-                Text("Varsayılan kalite", color = SY.Text, fontSize = 14.5.sp, modifier = Modifier.padding(top = 4.dp))
+                Text(
+                    if (vm.cloudAvailable) "Telefonda dökme kalitesi" else "Varsayılan kalite",
+                    color = SY.Text, fontSize = 14.5.sp, modifier = Modifier.padding(top = 4.dp),
+                )
                 Quality.entries.forEach { q ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { vm.setDefaultQuality(q) },
@@ -191,8 +216,10 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
             // --- Gizlilik ---
             Group("Gizlilik") {
                 Text(
-                    "Sesin ve metnin telefonundan çıkmaz. Yazıya dökme ve çeviri tamamen cihazda yapılır. " +
-                        "Reklamlar Google AdMob tarafından gösterilir.",
+                    (if (s.engineMode == 1) "Hızlı modda ses, yazıya dökülmek için Meta Wit.ai'ye gönderilir; saklamayız. " +
+                        "\"Telefonda\" seçersen ses ve metin telefonundan çıkmaz. "
+                    else "Sesin ve metnin telefonundan çıkmaz; yazıya dökme cihazda yapılır. ") +
+                        "Çeviri cihazda yapılır. Reklamlar Google AdMob tarafından gösterilir.",
                     color = SY.Muted, fontSize = 12.5.sp,
                 )
                 LinkRow("Gizlilik politikası") { openUrl(context, PRIVACY_URL) }

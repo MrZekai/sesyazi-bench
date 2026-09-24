@@ -124,12 +124,15 @@ fun MainScreen(
         }
     }
 
+    // İlk kullanımda motor seçimi (Hızlı/Gizli) — hangi ekranda olursa olsun
+    if (s.askEngine) EngineChoiceDialog(onChoose = vm::setEngineMode)
+
     if (showSettings) {
         SettingsScreen(vm, s, onBack = { showSettings = false })
         return
     }
     // Döküm metni gelmeye başlayınca, yeniden dökümde ya da bir not açılınca: tam ekran not defteri
-    if (s.result != null || s.live.isNotEmpty() || s.previousResult != null) {
+    if (s.result != null || s.live.isNotEmpty() || s.livePartial != null || s.previousResult != null) {
         NoteScreen(s, vm, adsReady, onHome = vm::goHome)
         return
     }
@@ -194,7 +197,9 @@ private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -
     Column(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(128.dp), contentAlignment = Alignment.Center) {
             when (val p = s.phase) {
-                is Phase.Transcribing -> ProgressRing(p.percent / 100f, "%${p.percent}")
+                is Phase.Transcribing -> if (p.percent < 0) CircularProgressIndicator(
+                    Modifier.size(118.dp), color = SY.Accent, strokeWidth = 8.dp, trackColor = SY.Card,
+                ) else ProgressRing(p.percent / 100f, "%${p.percent}")
                 is Phase.Downloading -> ProgressRing(p.progress, "%${(p.progress * 100).toInt()}")
                 is Phase.Preparing -> CircularProgressIndicator(
                     Modifier.size(118.dp), color = SY.Accent, strokeWidth = 8.dp, trackColor = SY.Card,
@@ -204,12 +209,15 @@ private fun Hero(s: MainState, busy: Boolean, onPick: () -> Unit, onCancel: () -
         }
         Spacer(Modifier.height(10.dp))
         val (title, sub) = when (val p = s.phase) {
-            is Phase.Preparing -> p.message to "Ses telefonundan çıkmaz"
+            is Phase.Preparing -> p.message to (if (s.engineMode == 1) "Hızlı mod · internet" else "Ses telefonundan çıkmaz")
             is Phase.Downloading -> "Model indiriliyor…" to "Tek seferlik · ${p.mb} MB"
             is Phase.Transcribing -> "Yazıya dökülüyor…" to
-                (s.etaSec?.let { "Tahmini ~$it sn · " } ?: "") + "internet gerekmez, ses telefondan çıkmaz"
+                if (p.percent < 0) "⚡ Hızlı mod · birkaç saniye"
+                else (s.etaSec?.let { "Tahmini ~$it sn · " } ?: "") + "internet gerekmez, ses telefondan çıkmaz"
             is Phase.Failed -> "Bir sorun oldu" to p.message
-            Phase.Idle -> "Sesli mesajı yazıya dök" to "WhatsApp'tan 3 dokunuşla · ses telefondan çıkmaz"
+            Phase.Idle -> "Sesli mesajı yazıya dök" to
+                if (s.engineMode == 1) "WhatsApp'tan 3 dokunuşla · ⚡ saniyeler içinde"
+                else "WhatsApp'tan 3 dokunuşla · ses telefondan çıkmaz"
         }
         Text(title, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = SY.Text)
         Text(
@@ -294,7 +302,18 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
             }
         }
         Spacer(Modifier.width(8.dp))
-        Quality.entries.forEach { q ->
+        // Motor: Hızlı (internet) / Telefonda. Hızlı modda kalite seçimi gizli
+        // (yalnızca internet yoksa telefonda varsayılan kaliteyle dökülür).
+        if (vm.cloudAvailable) {
+            val fast = s.engineMode == 1
+            Pill(
+                if (fast) "⚡ Hızlı" else "🔒 Telefonda",
+                bg = if (fast) SY.Accent else SY.Chip, fg = if (fast) SY.OnAccent else SY.Text,
+                modifier = Modifier.padding(end = 8.dp),
+                onClick = { if (!busy) vm.setEngineMode(if (fast) 2 else 1) },
+            )
+        }
+        if (s.engineMode != 1) Quality.entries.forEach { q ->
             val sel = s.quality == q
             Pill(
                 q.label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
@@ -303,12 +322,38 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
                     if (!busy && !sel) {
                         vm.setQuality(q)
                         if (q == Quality.BEST) vm.toast("En iyi: ${q.model.approxMb} MB model, orta seviye telefonlarda yavaş")
-                        vm.retranscribe()
+                        vm.retranscribe(forceLocal = true)
                     }
                 },
             )
         }
     }
+}
+
+/**
+ * İlk kullanımda motor seçimi. Hızlı: ses Meta Wit.ai'ye gönderilir (saniyeler).
+ * Telefonda: ses cihazdan çıkmaz (daha yavaş). Ayarlar'dan her zaman değişir.
+ */
+@Composable
+private fun EngineChoiceDialog(onChoose: (Int) -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = {}, // seçim yapılmadan kapanmasın (döküm bu cevabı bekliyor)
+        containerColor = SY.Sheet, titleContentColor = SY.Text, textContentColor = SY.Muted,
+        title = { Text("Nasıl yazıya dökelim?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("⚡ Hızlı (önerilen): Metin birkaç saniyede hazır. Ses, yazıya dökülmek için internet üzerinden Meta Wit.ai'ye gönderilir.", fontSize = 13.5.sp)
+                Text("🔒 Telefonda: Ses telefonundan hiç çıkmaz, internetsiz çalışır. Uzun seslerde dakikalar sürebilir.", fontSize = 13.5.sp)
+                Text("İnternet olmadığında Hızlı mod da otomatik olarak telefonda çalışır. Tercihini Ayarlar'dan değiştirebilirsin.", fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { onChoose(1) }) { Text("⚡ Hızlı", color = SY.Accent) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = { onChoose(2) }) { Text("🔒 Telefonda", color = SY.Text) }
+        },
+    )
 }
 
 @Composable

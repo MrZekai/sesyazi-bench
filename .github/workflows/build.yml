@@ -20,6 +20,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build release APK (native -O3, debug imzalı)
+        env:
+          # Hızlı mod anahtarları (Settings → Secrets → Actions → WIT_TOKENS)
+          WIT_TOKENS: ${{ secrets.WIT_TOKENS }}
         run: |
           chmod +x gradlew
           ./gradlew :app:assembleRelease --stacktrace
