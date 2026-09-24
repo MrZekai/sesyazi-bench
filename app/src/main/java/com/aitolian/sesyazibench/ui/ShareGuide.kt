@@ -33,43 +33,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aitolian.sesyazibench.R
 
-private val WaGreen = Color(0xFF25D366)
 private val WaBubble = Color(0xFF1F5C4A)
 private val WaDark = Color(0xFF0B141A)
 private val WaBar = Color(0xFF1F2C33)
 
 /**
- * Ana giriş: WhatsApp'ın kendi "Paylaş" menüsü. Klasör izni yok; kullanıcı
- * 3 adımı görsel olarak görür ve tek dokunuşla WhatsApp'a geçer.
+ * Kullanım kılavuzu: WhatsApp'ın kendi "Paylaş" menüsü (klasör izni yok).
+ * Giriş düğmeleri artık ana sayfanın üstünde; burada yalnızca 3 adım.
  */
 @Composable
-fun ShareGuide(onOpenWhatsApp: () -> Unit, onOtherFile: () -> Unit) {
+fun ShareGuide() {
     val app = stringResource(R.string.app_name)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            "NASIL KULLANILIR", color = SY.Accent, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 4.dp),
-        )
         Step(1, "Sesli mesaja uzun bas", "WhatsApp sohbetinde, mesaj seçilene kadar") { IllLongPress() }
         Step(2, "Paylaş simgesine dokun", "Üst çubukta (bazı telefonlarda ⋮ menüsünde)") { IllShareIcon() }
         Step(3, "Listeden $app uygulamasını seç", "Metin hemen hazırlanır. Bir sonraki sefer listede ilk sıralarda olur.") {
             IllShareSheet(app)
         }
-        Box(
-            Modifier.padding(top = 4.dp).fillMaxWidth().height(50.dp).clip(CircleShape).background(WaGreen)
-                .clickable(onClick = onOpenWhatsApp),
-            contentAlignment = Alignment.Center,
-        ) { Text("💬  WhatsApp'ı aç", color = Color(0xFF062B16), fontSize = 15.sp, fontWeight = FontWeight.Bold) }
-        Text(
-            "Başka bir ses / video dosyası seç", color = SY.Accent, fontSize = 13.5.sp,
-            modifier = Modifier.align(Alignment.CenterHorizontally).clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onOtherFile).padding(8.dp),
-        )
-        // Rakipteki gibi sade kaynak belirtimi; ayrıntı Ayarlar > Gizlilik ve gizlilik politikasında
-        Text(
-            "Powered by Wit.ai", color = SY.Muted, fontSize = 11.sp,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
     }
 }
 
@@ -84,7 +64,7 @@ private fun Step(n: Int, title: String, sub: String, illustration: @Composable (
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(title, color = SY.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(sub, color = SY.Muted, fontSize = 12.sp, lineHeight = 15.sp)
+            Text(sub, color = SY.Muted, fontSize = 12.5.sp, lineHeight = 16.sp)
         }
         Box(Modifier.width(112.dp).height(62.dp).clip(RoundedCornerShape(12.dp)).background(WaDark)) { illustration() }
     }

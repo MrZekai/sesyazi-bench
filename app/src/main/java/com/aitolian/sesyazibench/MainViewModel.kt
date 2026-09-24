@@ -105,6 +105,12 @@ data class MainState(
     val livePartial: String? = null,
     /** Motor tercihi: 0 sorulmadı, 1 Hızlı (internet), 2 Gizli (telefonda). */
     val engineMode: Int = 0,
+    /** Satır aralığı: 0 sıkı, 1 normal, 2 geniş. */
+    val readerLine: Int = 1,
+    /** Ses çalarken okunan cümleyi takip et. */
+    val followAudio: Boolean = true,
+    /** Tema: 0 sistem, 1 açık, 2 koyu. */
+    val themeMode: Int = 0,
 )
 
 /** Wit.ai ile üretilen notların kalite etiketi. */
@@ -185,6 +191,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.update {
             it.copy(
                 quality = q, lang = l, translationTarget = target ?: it.translationTarget, readerFont = prefs.readerFont,
+                readerLine = prefs.readerLine.coerceIn(0, 2), followAudio = prefs.followAudio,
+                themeMode = prefs.themeMode.coerceIn(0, 2),
                 engineMode = if (WitEngine.tokens.isEmpty()) 2 else prefs.engineMode.takeIf { it != 0 } ?: 1,
             )
         }
@@ -216,6 +224,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val v = sp.coerceIn(14, 30)
         prefs.readerFont = v
         _state.update { it.copy(readerFont = v) }
+    }
+
+    fun setReaderLine(v: Int) {
+        val x = v.coerceIn(0, 2)
+        prefs.readerLine = x
+        _state.update { it.copy(readerLine = x) }
+    }
+
+    fun setFollowAudio(on: Boolean) {
+        prefs.followAudio = on
+        _state.update { it.copy(followAudio = on) }
+    }
+
+    fun setThemeMode(m: Int) {
+        val x = m.coerceIn(0, 2)
+        prefs.themeMode = x
+        _state.update { it.copy(themeMode = x) }
     }
 
     // ------------------------------------------------------------------
@@ -997,16 +1022,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         ticker?.cancel()
         if (playing) ticker = viewModelScope.launch {
             while (isActive && player.isPlaying) {
-                _state.update { it.copy(positionMs = player.positionMs) }
+                // MediaPlayer.seekTo eşzamansız: atlamadan hemen sonra eski konumu okuyup geri sıçramasın
+                if (SystemClock.elapsedRealtime() - lastSeekAt > 400) {
+                    _state.update { it.copy(positionMs = player.positionMs) }
+                }
                 delay(150)
             }
             _state.update { it.copy(playing = player.isPlaying) }
         }
     }
 
+    @Volatile private var lastSeekAt = 0L
+
     fun seekTo(ms: Long) {
-        player.seekTo(ms)
-        _state.update { it.copy(positionMs = ms) }
+        lastSeekAt = SystemClock.elapsedRealtime()
+        val max = state.value.audioMs
+        val v = if (max > 0) ms.coerceIn(0, max) else ms.coerceAtLeast(0)
+        player.seekTo(v)
+        _state.update { it.copy(positionMs = v) }
     }
 
     private fun stopPlayback() {

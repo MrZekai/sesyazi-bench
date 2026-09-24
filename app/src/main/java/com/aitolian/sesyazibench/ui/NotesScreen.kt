@@ -45,6 +45,15 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import com.aitolian.sesyazibench.MainState
 import com.aitolian.sesyazibench.MainViewModel
 import com.aitolian.sesyazibench.data.Transcript
@@ -55,8 +64,10 @@ import java.util.Locale
  * eşleşen yer kartta vurgulanır. Dokun → aç, basılı tut → sil (geri alınabilir).
  */
 @Composable
-fun AllNotesScreen(s: MainState, vm: MainViewModel, onBack: () -> Unit) {
+fun AllNotesScreen(s: MainState, vm: MainViewModel, focusSearch: Boolean = false, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { if (focusSearch) runCatching { focus.requestFocus() } }
     var query by rememberSaveable { mutableStateOf("") }
     val q = remember(query) { fold(query.trim()) }
     val results = remember(s.history, q) {
@@ -73,27 +84,28 @@ fun AllNotesScreen(s: MainState, vm: MainViewModel, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(SY.Bg).statusBarsPadding().navigationBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onBack)
-                    .semantics { contentDescription = "Geri" },
-                contentAlignment = Alignment.Center,
-            ) { Text("←", fontSize = 22.sp, color = SY.Text) }
+            IconTap(Icons.AutoMirrored.Filled.ArrowBack, "Geri", onClick = onBack)
             Text("Notlarım", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = SY.Text, modifier = Modifier.weight(1f))
             Text("${s.history.size}/${com.aitolian.sesyazibench.data.HistoryStore.MAX}", color = SY.Muted, fontSize = 12.sp,
                 modifier = Modifier.padding(end = 12.dp))
         }
         // Arama kutusu
-        Box(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(14.dp))
-                .background(SY.Card).padding(horizontal = 14.dp, vertical = 12.dp),
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).heightIn(min = 52.dp)
+                .clip(RoundedCornerShape(16.dp)).background(SY.Card).padding(start = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (query.isEmpty()) Text("🔍  Notlarda ara…", color = SY.Muted, fontSize = 15.sp)
-            BasicTextField(
-                value = query, onValueChange = { query = it }, singleLine = true,
-                textStyle = TextStyle(color = SY.Text, fontSize = 15.sp),
-                cursorBrush = SolidColor(SY.Accent),
-                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Notlarda ara" },
-            )
+            Icon(Icons.Filled.Search, contentDescription = null, tint = SY.Muted, modifier = Modifier.size(22.dp))
+            Box(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                if (query.isEmpty()) Text("Notlarda ara…", color = SY.Muted, fontSize = 15.sp)
+                BasicTextField(
+                    value = query, onValueChange = { query = it }, singleLine = true,
+                    textStyle = TextStyle(color = SY.Text, fontSize = 15.sp),
+                    cursorBrush = SolidColor(SY.Accent),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Notlarda ara" },
+                )
+            }
+            if (query.isNotEmpty()) IconTap(Icons.Filled.Close, "Aramayı temizle", tint = SY.Muted) { query = "" }
         }
         if (results.isEmpty()) {
             Text(
@@ -129,11 +141,12 @@ private fun UndoRow(s: MainState, vm: MainViewModel) {
             .background(SY.Card).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Silindi: ${d.preview}", color = SY.Muted, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Text(
-            "Geri al", color = SY.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = vm::undoDelete).padding(8.dp),
-        )
+        Text("Silindi: ${d.preview}", color = SY.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Box(
+            Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = vm::undoDelete)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text("Geri al", color = SY.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
     }
 }
 
@@ -147,11 +160,11 @@ internal fun NoteCard(t: Transcript, onOpen: () -> Unit, onDelete: () -> Unit, s
                 onClickLabel = "Notu aç", onLongClickLabel = "Notu sil",
                 onClick = onOpen, onLongClick = onDelete,
             )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                titleOf(t), color = SY.Text, fontSize = 14.5.sp, fontWeight = FontWeight.Medium,
+                titleOf(t), color = SY.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
             Text(

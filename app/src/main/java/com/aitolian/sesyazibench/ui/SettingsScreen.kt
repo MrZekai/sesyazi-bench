@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,6 +31,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenu
@@ -103,15 +108,20 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(SY.Bg).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-                Text("←", fontSize = 22.sp, color = SY.Text)
-            }
+            IconTap(Icons.AutoMirrored.Filled.ArrowBack, "Geri", onClick = onBack)
             Text("Ayarlar", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = SY.Text)
         }
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            // --- Görünüm ---
+            Group("Görünüm") {
+                Text("Tema", color = SY.Text, fontSize = 14.5.sp)
+                Segmented(listOf("Sistem", "Açık", "Koyu"), s.themeMode) { vm.setThemeMode(it) }
+                Hint("Yazı boyutu, satır aralığı ve sesle takip: not ekranındaki \"Aa\" düğmesi.")
+            }
+
             // --- Transkript ---
             Group("Transkript") {
                 if (vm.cloudAvailable) {
@@ -414,7 +424,7 @@ private fun ItemRow(title: String, sub: String, modifier: Modifier = Modifier, t
 @Composable
 private fun LinkRow(title: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, color = SY.Text, fontSize = 14.sp, modifier = Modifier.weight(1f))
@@ -425,7 +435,8 @@ private fun LinkRow(title: String, onClick: () -> Unit) {
 @Composable
 private fun TextAction(label: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
     Text(label, color = color, fontSize = 13.5.sp, fontWeight = FontWeight.Medium,
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp))
+        modifier = Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onClick)
+            .wrapContentHeight().padding(horizontal = 12.dp))
 }
 
 @Composable

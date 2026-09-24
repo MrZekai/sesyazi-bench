@@ -17,6 +17,14 @@ import kotlinx.coroutines.launch
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ui.MainScreen
 import com.aitolian.sesyazibench.ui.SesYaziTheme
+import com.aitolian.sesyazibench.ui.isDarkTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import android.graphics.drawable.ColorDrawable
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
@@ -32,7 +40,18 @@ class MainActivity : ComponentActivity() {
         ShareIntegration.publishShareShortcut(this)
         if (savedInstanceState == null) handleShare(intent)
         setContent {
-            SesYaziTheme {
+            // Yalnızca tema değişince yenilenir (oynatma adımlarında kök yeniden çizilmesin)
+            val themeFlow = remember { vm.state.map { it.themeMode }.distinctUntilChanged() }
+            val themeMode by themeFlow.collectAsStateWithLifecycle(vm.state.value.themeMode)
+            val dark = isDarkTheme(themeMode)
+            // Durum/gezinme çubuğu simgeleri ve pencere zemini temaya uysun
+            LaunchedEffect(dark) {
+                val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT)
+                else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                window.setBackgroundDrawable(ColorDrawable(if (dark) 0xFF0E0B1A.toInt() else 0xFFF6F4FB.toInt()))
+            }
+            SesYaziTheme(themeMode) {
                 MainScreen(
                     vm,
                     onNewAudio = { then -> then() }, // reklam artık döküm başında

@@ -27,6 +27,21 @@ class Prefs(context: Context) {
         get() = p.getInt("reader_font", 19)
         set(v) = p.edit().putInt("reader_font", v).apply()
 
+    /** Satır aralığı: 0 sıkı, 1 normal, 2 geniş. */
+    var readerLine: Int
+        get() = p.getInt("reader_line", 1)
+        set(v) = p.edit().putInt("reader_line", v).apply()
+
+    /** Ses çalarken okunan cümleyi takip et (ekran kendiliğinden kayar). */
+    var followAudio: Boolean
+        get() = p.getBoolean("follow_audio", true)
+        set(v) = p.edit().putBoolean("follow_audio", v).apply()
+
+    /** Tema: 0 sistem, 1 açık, 2 koyu. */
+    var themeMode: Int
+        get() = p.getInt("theme", 0)
+        set(v) = p.edit().putInt("theme", v).apply()
+
     /** Geliştirici A/B ölçümü: whisper thread sayısı (0 = otomatik). */
     var threadOverride: Int
         get() = p.getInt("threads", 0)
