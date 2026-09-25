@@ -76,6 +76,7 @@ import com.aitolian.sesyazibench.R
 import com.aitolian.sesyazibench.ShareIntegration
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ads.BannerAd
+import com.aitolian.sesyazibench.ads.NativeAdCard
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.TRANSLATABLE
 
@@ -154,12 +155,10 @@ fun MainScreen(
             if (s.history.isNotEmpty()) SearchEntry { notesMode = NOTES_SEARCH }
             UndoBar(s, vm)
             History(s, vm, onAllNotes = { notesMode = NOTES_LIST })
+            // Ana sayfada banner yerine içerik akışında yerel reklam (notlar ile kılavuz arasında, düğmelerden ayrı)
+            if (adsReady) NativeAdCard(Modifier.padding(vertical = 4.dp))
             GuideSection(firstUse = s.history.isEmpty())
-            Spacer(Modifier.height(4.dp))
-        }
-        // Altta sabit banner — içerikle asla çakışmaz
-        Box(Modifier.fillMaxWidth().background(SY.AdBg).navigationBarsPadding().padding(vertical = 4.dp)) {
-            if (adsReady) BannerAd() else Spacer(Modifier.fillMaxWidth().height(50.dp))
+            Spacer(Modifier.height(4.dp).navigationBarsPadding())
         }
     }
 }

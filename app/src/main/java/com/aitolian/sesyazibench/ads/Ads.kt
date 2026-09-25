@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 object Ads {
     const val BANNER_ID = "ca-app-pub-3940256099942544/9214589741"        // test: adaptive banner
     const val INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712"  // test: interstitial
+    const val NATIVE_ID = "ca-app-pub-3940256099942544/2247696110"        // test: native advanced
 
     // Geçiş reklamı sınırları (her döküm başında denenir; bu sınırlar aşırılığı önler)
     private const val MIN_GAP_MS = 60_000L          // iki reklam arası en az 60 sn
