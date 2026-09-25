@@ -139,7 +139,7 @@ class WhisperEngine(
     }
 
     companion object {
-        const val CANCELLED = "İptal edildi"
+        const val CANCELLED = ERR_CANCELLED
 
         private val lock = Mutex()
         private var cachedModel: WhisperModel? = null

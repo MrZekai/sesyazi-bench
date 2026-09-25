@@ -57,6 +57,8 @@ android {
         compose = true
         buildConfig = true
     }
+    // Birim testleri: Android çağrıları (SystemClock vb.) varsayılan değer döndürür
+    testOptions { unitTests.isReturnDefaultValues = true }
     // ggml CPU varyantları dlopen ile yüklenir → .so dosyaları diske çıkarılmalı
     packaging { jniLibs { useLegacyPackaging = true } }
 }
@@ -79,6 +81,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    // Birim testleri (JVM): gerçek org.json (Android'deki taslak sürüm değil)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
 
     // ML Kit çeviri — cihaz içi, dil paketi ilk kullanımda indirilir

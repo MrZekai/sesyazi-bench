@@ -162,24 +162,30 @@ internal fun NoteCard(t: Transcript, onOpen: () -> Unit, onDelete: () -> Unit, s
             )
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Başlık tek başına tam genişlik; süre/tarih ayrı küçük satırda (başlık daralmasın)
+        Text(
+            titleOf(t), color = SY.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            "${Transcript.clock(t.durationMs)} · ${noteDate(t)}", color = SY.Muted, fontSize = 12.sp,
+            modifier = Modifier.padding(top = 1.dp),
+        )
+        // Ön izleme: arama eşleşmesi; yoksa başlıkta görünen kelimelerden SONRAKİ metin
+        val preview: AnnotatedString? = snippet ?: previewAfterTitle(t)?.let { AnnotatedString(it) }
+        if (preview != null) {
             Text(
-                titleOf(t), color = SY.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                preview, color = SY.Muted, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp),
             )
-            Text(
-                "${Transcript.clock(t.durationMs)} · ${noteDate(t)}", color = SY.Muted, fontSize = 11.5.sp,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
-        if (snippet != null) {
-            Text(snippet, color = SY.Muted, fontSize = 12.5.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp))
-        } else {
-            Text(t.text, color = SY.Muted, fontSize = 12.5.sp, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp))
         }
     }
+}
+
+/** Başlıktaki (ilk 6) kelimeden sonraki metin; kısa notta tekrar olmasın diye null. */
+internal fun previewAfterTitle(t: Transcript): String? {
+    val w = t.text.split(Regex("\\s+")).filter { it.isNotBlank() }
+    return if (w.size <= 6) null else "…" + w.drop(6).joinToString(" ")
 }
 
 private val TR = Locale("tr")

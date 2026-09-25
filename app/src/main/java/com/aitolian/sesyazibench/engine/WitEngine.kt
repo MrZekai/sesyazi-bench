@@ -2,7 +2,7 @@ package com.aitolian.sesyazibench.engine
 
 import android.os.SystemClock
 import com.aitolian.sesyazibench.BuildConfig
-import com.aitolian.sesyazibench.audio.AudioDecoder
+import com.aitolian.sesyazibench.audio.AUDIO_RATE
 import com.aitolian.sesyazibench.audio.DecodedAudio
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -18,7 +18,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -41,11 +40,48 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - Her parçanın sonucu ayrı tutulur: biri başarısız olursa diğerleri kaybolmaz;
  *    geçici hatalar sınırlı sayıda yeniden denenir, 429'da beklenir.
  *  - Yanıt katı doğrulanır: yarım JSON / final'siz bitiş = hata (eksik metin
- *    başarı sayılmaz).
+ *    başarı sayılmaz). Hiç olay içermeyen boş 200 gövdesi de hatadır; yalnız
+ *    parça gerçekten sessizse (düşük RMS) "konuşma yok" kabul edilir.
+ *  - Her parça için içerik içermeyen teşhis ([ChunkDiag]) tutulur.
  *  - İptal ve süre aşımında bağlantı ayrı bir bekçiyle hemen kapatılır.
  *  - Hata metinleri sabit kodlardır (sunucu yanıt gövdesi saklanmaz/loglanmaz).
  */
-class WitEngine(private val token: String) {
+class WitEngine(
+    private val token: String,
+    private val connector: WitConnector = WitConnector.Default,
+) {
+
+    /** HTTP bağlantısı açıcı (testlerde sahte yanıt için değiştirilir). */
+    fun interface WitConnector {
+        fun open(): HttpURLConnection
+
+        companion object {
+            val Default = WitConnector { URL(API).openConnection() as HttpURLConnection }
+        }
+    }
+
+    /**
+     * Parça teşhisi — yalnız sayılar ve kodlar; metin/anahtar yok.
+     * [codes]: her denemenin sonucu ("OK", "OK_SILENT" ya da hata kodu).
+     */
+    class ChunkDiag(
+        val index: Int, val fromMs: Long, val toMs: Long, val samples: Int, val bytes: Int,
+        /** Parça ortalaması. */
+        val rms: Double,
+        /** En yüksek 200 ms pencere; sessizlik kararı bununla verilir. */
+        val peakRms: Double,
+    ) {
+        val codes = mutableListOf<String>()
+        var events = 0
+        var finalsIn = 0
+        var finalsKept = 0
+        var dupDropped = 0
+        var echoIgnored = 0
+        /** Son finalle aynı metinli ara metin kesinleşmeden akış bitti (yeni söyleyiş olabilir). */
+        var unconfirmedRepeat = 0
+        /** true: belirteç zamanı, false: yaklaşık (orantılı), null: final yok. */
+        var reliableTimes: Boolean? = null
+    }
 
     /** Tek parçanın sonucu. */
     sealed interface ChunkOutcome {
@@ -56,12 +92,16 @@ class WitEngine(private val token: String) {
     /** Başarısız kalan parçanın örnek aralığı (yerel tamamlama için) ve hata kodu. */
     data class FailedChunk(val from: Int, val to: Int, val code: String)
 
-    data class Outcome(val result: EngineResult, val failed: List<FailedChunk>) {
+    data class Outcome(
+        val result: EngineResult,
+        val failed: List<FailedChunk>,
+        val diag: List<ChunkDiag> = emptyList(),
+    ) {
         val authFailed: Boolean get() = failed.any { it.code == ERR_AUTH }
     }
 
     companion object {
-        private const val API = "https://api.wit.ai/dictation?v=20240304"
+        internal const val API = "https://api.wit.ai/dictation?v=20240304"
         private const val CONTENT_TYPE = "audio/raw;encoding=signed-integer;bits=16;rate=16000;endian=little"
         const val CHUNK_MAX_MS = 50_000L
         private const val CHUNK_MIN_MS = 25_000L
@@ -70,16 +110,22 @@ class WitEngine(private val token: String) {
         /** Aynı cihazdan art arda istek başlatma aralığı (dakikalık kota için yumuşatma). */
         private const val MIN_START_GAP_MS = 300L
         private const val MAX_FRAME_CHARS = 1_048_576
+        /**
+         * Boş gövde bu düzeyin altındaki parçada "konuşma yok" sayılır (≈ -50 dBFS).
+         * Üstündeyse boş gövde hata: yeniden denenir, sonra tamamlama/uyarı yoluna girer.
+         */
+        internal const val SILENCE_RMS = 0.003
         const val ENGINE = "wit.ai"
 
-        const val ERR_AUTH = "WIT_AUTH"
-        const val ERR_RATE = "WIT_RATE_LIMIT"
-        const val ERR_SERVER = "WIT_SERVER"
-        const val ERR_NETWORK = "WIT_NETWORK"
-        const val ERR_TIMEOUT = "WIT_TIMEOUT"
-        const val ERR_TRUNCATED = "WIT_TRUNCATED"
-        const val ERR_INVALID = "WIT_INVALID_JSON"
-        const val ERR_SERVICE = "WIT_ERROR"
+        const val ERR_AUTH = WIT_ERR_AUTH
+        const val ERR_RATE = WIT_ERR_RATE
+        const val ERR_SERVER = WIT_ERR_SERVER
+        const val ERR_NETWORK = WIT_ERR_NETWORK
+        const val ERR_TIMEOUT = WIT_ERR_TIMEOUT
+        const val ERR_TRUNCATED = WIT_ERR_TRUNCATED
+        const val ERR_INVALID = WIT_ERR_INVALID
+        const val ERR_SERVICE = WIT_ERR_SERVICE
+        const val ERR_EMPTY = WIT_ERR_EMPTY
 
         /** Derlemede gelen dil → anahtar eşlemesi; geçersiz girdiler tek tek atlanır. */
         val tokens: Map<String, String> by lazy {
@@ -98,6 +144,12 @@ class WitEngine(private val token: String) {
         @Volatile private var lastStartAt = 0L
         @Volatile private var cooldownUntil = 0L
 
+        /** Birim testleri: önceki testin 429 beklemesi sonrakine taşınmasın. */
+        internal fun resetSchedulerForTests() {
+            lastStartAt = 0L
+            cooldownUntil = 0L
+        }
+
         private suspend fun awaitStartSlot() {
             startLock.withLock {
                 val now = SystemClock.elapsedRealtime()
@@ -114,7 +166,7 @@ class WitEngine(private val token: String) {
          */
         fun splitPoints(samples: FloatArray): List<Pair<Int, Int>> {
             if (samples.isEmpty()) return emptyList()
-            val rate = AudioDecoder.TARGET_RATE
+            val rate = AUDIO_RATE
             val maxLen = (CHUNK_MAX_MS * rate / 1000).toInt()
             val minLen = (CHUNK_MIN_MS * rate / 1000).toInt()
             val win = rate / 5 // 200 ms
@@ -161,6 +213,12 @@ class WitEngine(private val token: String) {
         val t0 = SystemClock.elapsedRealtime()
         val parts = splitPoints(audio.samples)
         if (parts.isEmpty()) return@withContext Outcome(base, emptyList())
+        val diags = parts.mapIndexed { i, (from, to) ->
+            ChunkDiag(
+                i, from * 1000L / AUDIO_RATE, to * 1000L / AUDIO_RATE, to - from, (to - from) * 2,
+                rms(audio.samples, from, to), peakWindowRms(audio.samples, from, to),
+            )
+        }
         val gate = Semaphore(PARALLEL)
         val states = List(parts.size) { PartState() }
         val lock = Any()
@@ -192,7 +250,7 @@ class WitEngine(private val token: String) {
             parts.mapIndexed { i, (from, to) ->
                 async {
                     val oc = gate.withPermit {
-                        runChunk(audio.samples, from, to, cancel, authDead) { finals, partial ->
+                        runChunk(audio.samples, from, to, cancel, authDead, diags[i]) { finals, partial ->
                             synchronized(lock) {
                                 states[i].finals = finals
                                 states[i].partial = partial
@@ -224,37 +282,41 @@ class WitEngine(private val token: String) {
             transcribeMs = ms, text = all.joinToString(" ") { it.text }, segments = all,
             rawSegmentCount = all.size, firstSegmentMs = firstSegmentMs, windows = parts.size,
             error = when {
-                cancelled -> WhisperEngine.CANCELLED
+                cancelled -> ERR_CANCELLED
                 failed.size == parts.size -> failed.first().code
                 else -> null
             },
         )
-        Outcome(result, if (cancelled) emptyList() else failed)
+        Outcome(result, if (cancelled) emptyList() else failed, diags)
     }
 
     /**
      * Bir parçayı, gerekirse yeniden deneyerek işler. 401/403 tekrar denenmez
      * (ve diğer parçalar da denemeyi bırakır); 429 önerilen süre kadar bekler;
-     * ağ/5xx/yarım yanıt en fazla [MAX_TRIES] kez, artan beklemeyle denenir.
+     * ağ/5xx/yarım ya da boş yanıt en fazla [MAX_TRIES] kez, artan beklemeyle denenir.
+     * Boş gövde, parça sessizse (RMS < [SILENCE_RMS]) yeniden denenmeden "konuşma yok" sayılır.
      */
     private suspend fun runChunk(
-        samples: FloatArray, from: Int, to: Int, cancel: AtomicBoolean, authDead: AtomicBoolean,
+        samples: FloatArray, from: Int, to: Int, cancel: AtomicBoolean, authDead: AtomicBoolean, diag: ChunkDiag,
         onLive: (List<String>, String?) -> Unit,
     ): ChunkOutcome {
-        val offsetMs = from * 1000L / AudioDecoder.TARGET_RATE
-        val durMs = (to - from) * 1000L / AudioDecoder.TARGET_RATE
+        val offsetMs = from * 1000L / AUDIO_RATE
+        val durMs = (to - from) * 1000L / AUDIO_RATE
         val body = pcm16(samples, from, to)
         var lastCode = ERR_NETWORK
         repeat(MAX_TRIES) { attempt ->
-            if (cancel.get()) return ChunkOutcome.Failure(WhisperEngine.CANCELLED)
+            if (cancel.get()) return ChunkOutcome.Failure(ERR_CANCELLED)
             if (authDead.get()) return ChunkOutcome.Failure(ERR_AUTH)
             awaitStartSlot()
             try {
-                return ChunkOutcome.Success(postChunk(body, offsetMs, durMs, cancel, onLive))
+                val segs = postChunk(body, offsetMs, durMs, cancel, diag, onLive)
+                diag.codes += "OK"
+                return ChunkOutcome.Success(segs)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: WitHttpException) {
                 lastCode = e.code
+                diag.codes += e.code
                 onLive(emptyList(), null)
                 when (e.code) {
                     ERR_AUTH -> { authDead.set(true); return ChunkOutcome.Failure(ERR_AUTH) }
@@ -262,16 +324,23 @@ class WitEngine(private val token: String) {
                         val wait = (e.retryAfterMs ?: (2_000L * (attempt + 1))).coerceIn(1_000L, 15_000L)
                         cooldownUntil = maxOf(cooldownUntil, SystemClock.elapsedRealtime() + wait)
                     }
-                    else -> delay(700L * (attempt + 1))
+                    else -> if (attempt < MAX_TRIES - 1) delay(700L * (attempt + 1))
                 }
             } catch (e: IOException) {
-                lastCode = if (cancel.get()) WhisperEngine.CANCELLED else classify(e)
+                lastCode = if (cancel.get()) ERR_CANCELLED else classify(e)
                 onLive(emptyList(), null)
-                if (cancel.get()) return ChunkOutcome.Failure(WhisperEngine.CANCELLED)
-                delay(700L * (attempt + 1))
+                if (cancel.get()) return ChunkOutcome.Failure(ERR_CANCELLED)
+                if (lastCode == ERR_EMPTY && diag.peakRms < SILENCE_RMS) {
+                    // Gerçekten sessiz parça: boş yanıt "konuşma yok"; boşuna yeniden deneme
+                    diag.codes += "OK_SILENT"
+                    return ChunkOutcome.Success(emptyList())
+                }
+                diag.codes += lastCode
+                if (attempt < MAX_TRIES - 1) delay(700L * (attempt + 1))
             } catch (e: Exception) {
-                // Beklenmeyen yanıt biçimi (ör. JSONException): parça başarısız, diğerleri sürer
+                // Beklenmeyen yanıt biçimi: parça başarısız, diğerleri sürer
                 lastCode = ERR_INVALID
+                diag.codes += lastCode
                 onLive(emptyList(), null)
             }
         }
@@ -281,8 +350,7 @@ class WitEngine(private val token: String) {
     private fun classify(e: IOException): String = when {
         e is SocketTimeoutException -> ERR_TIMEOUT
         e is UnknownHostException -> ERR_NETWORK
-        e.message == ERR_TRUNCATED || e.message == ERR_INVALID || e.message == ERR_SERVICE ||
-            e.message == ERR_TIMEOUT -> e.message!!
+        e.message in KNOWN_CODES -> e.message!!
         else -> ERR_NETWORK
     }
 
@@ -300,10 +368,10 @@ class WitEngine(private val token: String) {
      * kapatır (engelleyen read/write'ı hemen keser).
      */
     private suspend fun postChunk(
-        body: ByteArray, offsetMs: Long, durMs: Long, cancel: AtomicBoolean,
+        body: ByteArray, offsetMs: Long, durMs: Long, cancel: AtomicBoolean, diag: ChunkDiag,
         onLive: (List<String>, String?) -> Unit,
     ): List<Segment> = coroutineScope {
-        val conn = (URL(API).openConnection() as HttpURLConnection).apply {
+        val conn = connector.open().apply {
             requestMethod = "POST"
             doOutput = true
             connectTimeout = 10_000
@@ -327,6 +395,7 @@ class WitEngine(private val token: String) {
                 if (cancel.get() || timedOut.get() || !isActive) runCatching { conn.disconnect() }
             }
         }
+        val st = WitStreamState()
         try {
             conn.outputStream.use { out ->
                 var off = 0
@@ -349,153 +418,42 @@ class WitEngine(private val token: String) {
                     else -> WitHttpException("WIT_HTTP_$code")
                 }
             }
-            val finals = mutableListOf<Final>()
             val parser = JsonStreamSplitter(MAX_FRAME_CHARS)
-            var seenAny = false
-            var pendingPartial = false
             conn.inputStream.reader(Charsets.UTF_8).use { input ->
                 val buf = CharArray(4 * 1024)
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break
                     for (json in parser.feed(String(buf, 0, n))) {
-                        val ev = parse(json)
-                        seenAny = true
-                        if (ev.isFinal) {
-                            pendingPartial = false
-                            val last = finals.lastOrNull()
-                            // Aynı final'in protokol tekrarı (metin + zaman aynı) atlanır;
-                            // farklı zamanda söylenen aynı cümle korunur
-                            val dup = last != null && last.text == ev.text && last.start == ev.start && last.end == ev.end
-                            if (ev.text.isNotEmpty() && !dup) finals += ev
-                            onLive(finals.map { it.text }, null)
-                        } else if (ev.text.isNotEmpty() && ev.text != finals.lastOrNull()?.text) {
-                            pendingPartial = true
-                            onLive(finals.map { it.text }, ev.text)
-                        }
+                        st.onEvent(parseWitEvent(json))
+                        onLive(st.finals.map { it.text }, st.partialText)
                     }
                 }
             }
             // Bekçi bağlantıyı kapattıysa okuma sessizce -1 dönebilir: yarım sonucu başarı sayma
             if (timedOut.get()) throw IOException(ERR_TIMEOUT)
-            if (cancel.get()) throw IOException(WhisperEngine.CANCELLED)
+            if (cancel.get()) throw IOException(ERR_CANCELLED)
             parser.finish()
-            // Ara metin geldi ama kesin metin gelmeden akış bitti → eksik yanıt
-            if (pendingPartial) throw IOException(ERR_TRUNCATED)
-            if (!seenAny) return@coroutineScope emptyList() // konuşma yok
-            timed(finals, offsetMs, durMs)
+            st.finish() // boş gövde / kesinleşmemiş ara metin → hata
+            val t = witTimed(st.finals, offsetMs, durMs)
+            diag.reliableTimes = if (st.finals.isEmpty()) null else t.reliable
+            t.segments
         } catch (e: IOException) {
             if (timedOut.get()) throw IOException(ERR_TIMEOUT)
             throw e
         } finally {
+            diag.events = st.events
+            diag.finalsIn = st.finalsIn
+            diag.finalsKept = st.finals.size
+            diag.dupDropped = st.dupDropped
+            diag.echoIgnored = st.echoIgnored
+            diag.unconfirmedRepeat = st.unconfirmedRepeat
             watchdog.cancel()
             runCatching { conn.disconnect() }
         }
     }
-
-    private class Final(val text: String, val isFinal: Boolean, val start: Long, val end: Long)
-
-    private fun parse(json: String): Final {
-        val o = try { JSONObject(json) } catch (_: JSONException) { throw IOException(ERR_INVALID) }
-        if (o.has("error")) throw IOException(ERR_SERVICE)
-        val text = o.optString("text").trim()
-        val isFinal = o.optBoolean("is_final", false) ||
-            o.optString("type").equals("FINAL_TRANSCRIPTION", ignoreCase = true)
-        var start = -1L
-        var end = -1L
-        o.optJSONObject("speech")?.optJSONArray("tokens")?.let { toks ->
-            if (toks.length() > 0) {
-                start = toks.optJSONObject(0)?.optLong("start", -1) ?: -1
-                end = toks.optJSONObject(toks.length() - 1)?.optLong("end", -1) ?: -1
-            }
-        }
-        return Final(text, isFinal, start, end)
-    }
-
-    /**
-     * Zaman damgaları. Bütün cümlelerin belirteç zamanları geçerliyse (0 ≤ başlangıç
-     * < bitiş ≤ parça süresi, sıralı) onlar kullanılır. Değilse parça süresi,
-     * cümlelere metin uzunluğuyla orantılı ve boşluksuz dağıtılır (sıfır süreli ya
-     * da ters aralık oluşmaz). Aynı metin farklı zamanda tekrar söylenebilir:
-     * yalnızca metni VE zamanı aynı olan protokol tekrarı atılır.
-     */
-    private fun timed(finals: List<Final>, offsetMs: Long, durMs: Long): List<Segment> {
-        if (finals.isEmpty()) return emptyList()
-        val tol = 500L
-        var prevEnd = 0L
-        val valid = finals.all { f ->
-            val ok = f.start >= 0 && f.start < f.end && f.start < durMs && f.end <= durMs + tol && f.start + tol >= prevEnd
-            if (ok) prevEnd = f.end
-            ok
-        }
-        val out = mutableListOf<Segment>()
-        if (valid) {
-            for (f in finals) {
-                val s = Segment(offsetMs + f.start, offsetMs + f.end.coerceAtMost(durMs), f.text)
-                val last = out.lastOrNull()
-                if (last != null && last.text == s.text && last.startMs == s.startMs && last.endMs == s.endMs) continue
-                out += s
-            }
-        } else {
-            val total = finals.sumOf { it.text.length.coerceAtLeast(1) }.toDouble()
-            var acc = 0.0
-            for (f in finals) {
-                val s = offsetMs + (durMs * acc / total).toLong()
-                acc += f.text.length.coerceAtLeast(1)
-                val e = offsetMs + (durMs * acc / total).toLong()
-                out += Segment(s, maxOf(e, s + 1), f.text)
-            }
-        }
-        return out
-    }
 }
 
-/**
- * Art arda gelen JSON nesnelerini (araya \r\n girebilir, bir nesne birden çok
- * pakete bölünebilir) süslü parantez derinliğiyle ayırır; dizgi içindeki
- * parantez ve kaçış karakterlerini dikkate alır. Tek nesne [maxChars] sınırını
- * aşarsa ya da akış yarım nesneyle biterse hata verir.
- */
-internal class JsonStreamSplitter(private val maxChars: Int = 1_048_576) {
-    private val buf = StringBuilder()
-    private var depth = 0
-    private var inString = false
-    private var escape = false
-
-    fun feed(chunk: String): List<String> {
-        val out = mutableListOf<String>()
-        for (c in chunk) {
-            if (depth == 0 && c != '{') {
-                if (!c.isWhitespace() && c != ',' && c != '[' && c != ']' && c != '\uFEFF') throw IOException("WIT_INVALID_JSON")
-                continue // nesneler arası boşluk/satır sonu
-            }
-            if (buf.length >= maxChars) throw IOException("WIT_INVALID_JSON")
-            buf.append(c)
-            if (inString) {
-                when {
-                    escape -> escape = false
-                    c == '\\' -> escape = true
-                    c == '"' -> inString = false
-                }
-                continue
-            }
-            when (c) {
-                '"' -> inString = true
-                '{' -> depth++
-                '}' -> {
-                    depth--
-                    if (depth == 0) {
-                        out += buf.toString()
-                        buf.setLength(0)
-                    }
-                }
-            }
-        }
-        return out
-    }
-
-    /** Akış sonu: yarım kalmış nesne varsa hata. */
-    fun finish() {
-        if (depth != 0 || inString || buf.isNotEmpty()) throw IOException("WIT_TRUNCATED")
-    }
-}
+private val KNOWN_CODES = setOf(
+    WIT_ERR_TRUNCATED, WIT_ERR_INVALID, WIT_ERR_SERVICE, WIT_ERR_TIMEOUT, WIT_ERR_EMPTY,
+)

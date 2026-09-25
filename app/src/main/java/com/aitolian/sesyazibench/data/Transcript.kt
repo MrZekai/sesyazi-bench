@@ -151,7 +151,9 @@ object HistoryStore {
         val arr = JSONArray()
         list.forEach { tr ->
             val segs = JSONArray()
-            tr.segments.forEach { s -> segs.put(JSONObject().put("s", s.startMs).put("e", s.endMs).put("t", s.text)) }
+            tr.segments.forEach { s ->
+                segs.put(JSONObject().put("s", s.startMs).put("e", s.endMs).put("t", s.text).apply { if (s.approx) put("a", true) })
+            }
             arr.put(
                 JSONObject().put("id", tr.id).put("fileName", tr.fileName).put("durationMs", tr.durationMs)
                     .put("language", tr.language).put("processMs", tr.processMs).put("segments", segs)
@@ -176,7 +178,7 @@ object HistoryStore {
                 processMs = o.getLong("processMs"),
                 segments = (0 until segs.length()).map { j ->
                     val s = segs.getJSONObject(j)
-                    Segment(s.getLong("s"), s.getLong("e"), s.getString("t"))
+                    Segment(s.getLong("s"), s.getLong("e"), s.getString("t"), approx = s.optBoolean("a", false))
                 },
                 editedText = o.optString("edited").ifEmpty { null },
                 revision = o.optInt("rev", 0),

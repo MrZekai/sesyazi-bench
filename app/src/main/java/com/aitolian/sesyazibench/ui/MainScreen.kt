@@ -149,16 +149,13 @@ fun MainScreen(
             if (busy || s.phase is Phase.Failed) {
                 StatusCard(s, busy, onCancel = vm::cancelWork, onRetry = { if (vm.canRetry()) vm.retranscribe() else openWhatsApp() })
             }
-            if (!busy) EntryCard(s, onWhatsApp = openWhatsApp, onFile = pickFile)
+            if (!busy) EntryCard(s, firstUse = s.history.isEmpty(), onWhatsApp = openWhatsApp, onFile = pickFile)
             Controls(s, busy, vm)
             if (s.history.isNotEmpty()) SearchEntry { notesMode = NOTES_SEARCH }
             UndoBar(s, vm)
             History(s, vm, onAllNotes = { notesMode = NOTES_LIST })
             GuideSection(firstUse = s.history.isEmpty())
-            Text(
-                "Powered by Wit.ai", color = SY.Muted, fontSize = 12.sp,
-                modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp),
-            )
+            Spacer(Modifier.height(4.dp))
         }
         // Altta sabit banner — içerikle asla çakışmaz
         Box(Modifier.fillMaxWidth().background(SY.AdBg).navigationBarsPadding().padding(vertical = 4.dp)) {
@@ -193,30 +190,42 @@ private fun TopBar(onHome: (() -> Unit)?, onSettings: () -> Unit) {
     }
 }
 
-/** Ses girişleri: ne yapacağı adından anlaşılan iki düğme. */
+/**
+ * Ses girişleri: ne yapacağı adından anlaşılan iki düğme. İlk kullanımda kısa
+ * yardım ve düğme alt açıklamaları görünür; not biriktikten sonra kart kısalır
+ * (adım adım yardım "Nasıl kullanılır?" altında kalır).
+ */
 @Composable
-private fun EntryCard(s: MainState, onWhatsApp: () -> Unit, onFile: () -> Unit) {
+private fun EntryCard(s: MainState, firstUse: Boolean, onWhatsApp: () -> Unit, onFile: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(SY.Sheet)
             .border(1.dp, SY.Outline, RoundedCornerShape(22.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("Sesli mesajı yazıya dök", color = SY.Text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-        Text(
-            if (s.engineMode == 1) "WhatsApp'ta sesli mesaja uzun bas → Paylaş → bu uygulamayı seç. Metin saniyeler içinde gelir."
-            else "WhatsApp'ta sesli mesaja uzun bas → Paylaş → bu uygulamayı seç. Ses telefondan çıkmaz.",
-            color = SY.Muted, fontSize = 13.5.sp, lineHeight = 19.sp,
+        if (firstUse) {
+            Text(
+                if (s.engineMode == 1) "WhatsApp'ta sesli mesaja uzun bas → Paylaş → bu uygulamayı seç. Metin saniyeler içinde gelir."
+                else "WhatsApp'ta sesli mesaja uzun bas → Paylaş → bu uygulamayı seç. Ses telefondan çıkmaz.",
+                color = SY.Muted, fontSize = 13.5.sp, lineHeight = 19.sp,
+            )
+        }
+        EntryButton(
+            Icons.Filled.Chat, "WhatsApp'ı aç", if (firstUse) "Sesli mesajı oradan paylaş" else null,
+            filled = true, onClick = onWhatsApp,
         )
-        EntryButton(Icons.Filled.Chat, "WhatsApp'ı aç", "Sesli mesajı oradan paylaş", filled = true, onClick = onWhatsApp)
-        EntryButton(Icons.Filled.FolderOpen, "Ses / video dosyası seç", "Telefondaki kayıtlar, müzik, video", filled = false, onClick = onFile)
+        EntryButton(
+            Icons.Filled.FolderOpen, "Ses / video dosyası seç", if (firstUse) "Ses kayıtları ve videolardaki konuşmalar" else null,
+            filled = false, onClick = onFile,
+        )
     }
 }
 
 @Composable
-private fun EntryButton(icon: ImageVector, title: String, sub: String, filled: Boolean, onClick: () -> Unit) {
+private fun EntryButton(icon: ImageVector, title: String, sub: String?, filled: Boolean, onClick: () -> Unit) {
     val fg = if (filled) SY.OnAccent else SY.Text
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 60.dp).clip(RoundedCornerShape(16.dp))
+        Modifier.fillMaxWidth().heightIn(min = if (sub != null) 60.dp else 52.dp).clip(RoundedCornerShape(16.dp))
             .background(if (filled) SY.Accent else SY.Card)
             .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -225,7 +234,7 @@ private fun EntryButton(icon: ImageVector, title: String, sub: String, filled: B
         Icon(icon, contentDescription = null, tint = if (filled) fg else SY.Accent, modifier = Modifier.size(24.dp))
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(title, color = fg, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text(sub, color = if (filled) fg.copy(alpha = .8f) else SY.Muted, fontSize = 12.5.sp)
+            if (sub != null) Text(sub, color = if (filled) fg.copy(alpha = .8f) else SY.Muted, fontSize = 12.5.sp)
         }
     }
 }

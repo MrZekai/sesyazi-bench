@@ -254,6 +254,8 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                     runCatching { context.startActivity(i) }
                 }
                 LinkRow("Açık kaynak lisansları") { showLicenses = true }
+                // Wit.ai Hizmet Koşulları 3.6: "Powered by Wit" + web sitesine bağlantı
+                if (vm.cloudAvailable) LinkRow("Powered by Wit · wit.ai") { openUrl(context, "https://wit.ai") }
                 Text(
                     "Bu uygulama WhatsApp veya Meta tarafından geliştirilmemiş, desteklenmemiş veya onaylanmamıştır. " +
                         "WhatsApp, WhatsApp LLC'nin ticari markasıdır. Hızlı mod, Meta'nın Wit.ai hizmetini kullanır.",
@@ -317,6 +319,15 @@ private fun DevTools(vm: MainViewModel, s: MainState, onClose: () -> Unit) {
         // Son dökümün aşama süreleri — hızın nerede kaybolduğunu gösterir
         Text("Son döküm süreleri", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         Text(s.lastTiming ?: "Henüz ölçüm yok. Bir ses dök.", fontSize = 12.sp, color = SY.Text)
+        // Eksik metin teşhisi: ses izi/kanal/süre, parça başına olay/final/tekrar sayıları (metin yok)
+        Text("Son döküm teşhisi", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(
+            s.lastDiag ?: "Geliştirici modu açıkken bir ses dök; ses ve parça ayrıntıları burada görünür.",
+            fontSize = 11.5.sp, color = SY.Text, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+        )
+        s.lastDiag?.let { d ->
+            Pill("Teşhisi paylaş", bg = SY.Chip, fg = SY.Text, onClick = { shareText(context, d) })
+        }
         Text("Thread sayısı (A/B ölçümü)", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(0, 2, 3, 4, 6).forEach { n ->

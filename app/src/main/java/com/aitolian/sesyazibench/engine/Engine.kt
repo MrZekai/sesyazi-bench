@@ -2,7 +2,14 @@ package com.aitolian.sesyazibench.engine
 
 import com.aitolian.sesyazibench.audio.DecodedAudio
 
-data class Segment(val startMs: Long, val endMs: Long, val text: String)
+/**
+ * @param approx zaman gerçek ses hizalaması değil, tahmin (ör. Wit belirteç zamanı
+ *   vermediğinde parça süresi metin uzunluğuyla bölündü). Eski kayıtlarda false.
+ */
+data class Segment(val startMs: Long, val endMs: Long, val text: String, val approx: Boolean = false)
+
+/** İptal edilen işlerin ortak hata kodu (kullanıcıya gösterilmez). */
+const val ERR_CANCELLED = "İptal edildi"
 
 data class EngineResult(
     val engine: String,

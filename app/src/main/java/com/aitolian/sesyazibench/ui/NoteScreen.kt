@@ -103,7 +103,7 @@ import com.aitolian.sesyazibench.ads.BannerAd
 import com.aitolian.sesyazibench.data.Exports
 import com.aitolian.sesyazibench.data.Transcript
 import com.aitolian.sesyazibench.engine.Lang
-import com.aitolian.sesyazibench.engine.OnDeviceTranslator
+import com.aitolian.sesyazibench.engine.Sentences
 import com.aitolian.sesyazibench.engine.Segment
 import com.aitolian.sesyazibench.engine.TRANSLATABLE
 import com.aitolian.sesyazibench.engine.langOf
@@ -253,12 +253,13 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                     BarButton("Vazgeç", Modifier.weight(1f), filled = false) { leaveEditThen {} }
                     BarButton("Kaydet", Modifier.weight(1f), filled = true) { vm.saveEdit(draft); editing = false }
                 } else {
-                    BarAction(Icons.Filled.ContentCopy, "Kopyala", Modifier.weight(1f)) {
-                        if (shownText == null) vm.toast("Çeviri henüz hazır değil")
-                        else { copyText(context, shownText); vm.toast("Kopyalandı") }
+                    // Çeviri sekmesinde çeviri hazır değilken kopyalanacak/paylaşılacak metin yok
+                    val ready = !shownText.isNullOrBlank()
+                    BarAction(Icons.Filled.ContentCopy, "Kopyala", Modifier.weight(1f), enabled = ready) {
+                        shownText?.let { copyText(context, it); vm.toast("Kopyalandı") }
                     }
-                    BarAction(Icons.Filled.Share, "Paylaş", Modifier.weight(1f)) {
-                        if (shownText == null) vm.toast("Çeviri henüz hazır değil") else shareText(context, shownText)
+                    BarAction(Icons.Filled.Share, "Paylaş", Modifier.weight(1f), enabled = ready) {
+                        shownText?.let { shareText(context, it) }
                     }
                     MoreAction(s, r, Modifier.weight(1f), onEdit = ::startEdit)
                 }
@@ -798,7 +799,9 @@ private fun TimedText(
                     contentAlignment = Alignment.CenterStart,
                 ) {
                     Text(
-                        Transcript.clock(seg.startMs), color = SY.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                        // "≈": zaman gerçek hizalama değil, tahmin (motor zaman vermedi)
+                        (if (seg.approx) "≈" else "") + Transcript.clock(seg.startMs),
+                        color = SY.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 6.dp),
                     )
                 }
@@ -845,22 +848,20 @@ private fun TranslationBody(s: MainState, vm: MainViewModel, font: Int, lineMul:
             else -> Pill("Çevir", bg = SY.Accent, fg = SY.OnAccent, onClick = { vm.translate(s.translationTarget) })
         }
         Spacer(Modifier.height(14.dp))
+        // Küçük ikincil seçenek; metnin Google'a gideceği açıkça yazılı
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SY.Card)
-                .clickable(role = Role.Button) {
+            Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(10.dp))
+                .clickable(role = Role.Button, onClickLabel = "Google Çeviri'de aç") {
                     if (!openGoogleTranslate(context, r.text, r.language, s.translationTarget.code)) {
                         vm.toast("Metin uzun: panoya kopyalandı, Google Çeviri'ye yapıştır")
                     }
                 }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text("Daha doğal çeviri: Google Çeviri'de aç", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text("Ücretsiz · internet gerekir · metin Google'a gönderilir", color = SY.Muted, fontSize = 12.sp)
-            }
-            Text("↗", color = SY.Accent, fontSize = 17.sp)
+            Text("Google Çeviri'de aç ↗", color = SY.Accent, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
         }
+        Text("Metin Google'a gönderilir · internet gerekir", color = SY.Muted, fontSize = 12.sp)
         Text(
             "Yukarıdaki çeviri cihazda yapılır; her dil paketi yalnızca ilk seferde indirilir.",
             fontSize = 12.sp, color = SY.Muted, modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
@@ -935,17 +936,22 @@ private fun toastLater(context: Context, msg: String) =
     android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
 
 @Composable
-private fun BarAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
+private fun BarAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier,
+    enabled: Boolean = true, onClick: () -> Unit,
+) {
+    // Devre dışıyken soluk görünür; clickable(enabled = false) erişilebilirlikte "devre dışı" bildirir
+    val a = if (enabled) 1f else 0.38f
     Row(
-        modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(SY.Card)
-            .clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
+        modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(SY.Card.copy(alpha = SY.Card.alpha * (if (enabled) 1f else 0.6f)))
+            .clickable(enabled = enabled, onClickLabel = label, role = Role.Button, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = SY.Accent, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = null, tint = SY.Accent.copy(alpha = a), modifier = Modifier.size(20.dp))
         Text(
-            label, color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+            label, color = SY.Text.copy(alpha = a), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp),
         )
     }
@@ -975,10 +981,9 @@ private fun processLine(r: Transcript): String {
     return when {
         r.quality == com.aitolian.sesyazibench.QUALITY_WIT_MIX && r.previewMs == 0L ->
             "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn · " +
-                (if (r.segments.any { it.text.startsWith("[⚠") }) "bazı bölümler yazıya dökülemedi" else "bazı bölümler telefonda tamamlandı") +
-                " · Powered by Wit.ai"
+                (if (r.segments.any { it.text.startsWith("[⚠") }) "bazı bölümler yazıya dökülemedi" else "bazı bölümler telefonda tamamlandı")
         r.quality == com.aitolian.sesyazibench.QUALITY_WIT && r.previewMs == 0L ->
-            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn'de yazıya döküldü · Powered by Wit.ai"
+            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn'de yazıya döküldü"
         r.previewMs > 0 -> "✓ Ön izleme ${sec(r.previewMs)} sn · En iyi ${sec(r.processMs)} sn · cihazda yazıya döküldü"
         q != null -> "✓ ${q.label} · ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
         else -> "✓ ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
@@ -997,12 +1002,13 @@ internal fun noteDate(t: Transcript): String =
 private fun words(t: String) = t.split(Regex("\\s+")).count { it.isNotBlank() }
 
 /**
- * Cümleleri ~3'erli paragraflara böler (zamanlarıyla); not defteri gibi rahat okunur.
+ * Okuma birimlerini ~3'erli paragraflara böler (zamanlarıyla); not defteri gibi rahat okunur.
  * Metinde noktalama yoksa bütün döküm tek "cümle" olur: o zaman motorun kendi
  * parçaları kullanılır (vurgu ve paragraflar anlamlı kalsın).
  */
 internal fun paragraphBlocks(segs: List<Segment>): List<List<Segment>> {
-    val sentences = OnDeviceTranslator.toSentences(segs)
+    // Okuma birimleri: aynı başlangıç zamanını paylaşan cümleler tek birim (sahte cümle zamanı yok)
+    val sentences = Sentences.readingUnits(segs)
     val avg = if (sentences.isEmpty()) 0 else sentences.sumOf { it.text.length } / sentences.size
     val units = if (avg > 280 && segs.size > sentences.size) segs.filter { it.text.isNotBlank() } else sentences
     return units.chunked(3)
@@ -1012,21 +1018,7 @@ internal fun paragraphBlocks(segs: List<Segment>): List<List<Segment>> {
 internal fun paragraphs(segs: List<Segment>): List<String> =
     paragraphBlocks(segs).map { p -> p.joinToString(" ") { it.text } }
 
-/**
- * Konumdaki cümle/satır: başlangıcı konumu geçmemiş son öğe; sonundan 1,5 sn'den
- * fazla sonraysa (sessizlik) hiçbiri.
- */
-internal fun activeIndex(items: List<Segment>, posMs: Long): Int? {
-    var lo = 0
-    var hi = items.lastIndex
-    var found = -1
-    while (lo <= hi) {
-        val mid = (lo + hi) ushr 1
-        if (items[mid].startMs <= posMs) { found = mid; lo = mid + 1 } else hi = mid - 1
-    }
-    if (found < 0) return null
-    return found.takeIf { posMs <= items[found].endMs + 1_500 }
-}
+internal fun activeIndex(items: List<Segment>, posMs: Long): Int? = Sentences.activeIndex(items, posMs)
 
 /** Düz cümle sırasından (paragraf, paragraf içindeki cümle). */
 private fun blockOf(blocks: List<List<Segment>>, sentence: Int): Pair<Int, Int>? {

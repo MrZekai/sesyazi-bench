@@ -40,6 +40,11 @@ jobs:
           print("WIT_TOKENS tamam: %d dil" % len(v) + (" (eksik: " + ", ".join(missing) + ")" if missing else ""))
           PY
 
+      - name: Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testReleaseUnitTest --stacktrace
+
       - name: Build release APK (native -O3, debug imzalı)
         env:
           # Hızlı mod anahtarları (Settings → Secrets → Actions → WIT_TOKENS)

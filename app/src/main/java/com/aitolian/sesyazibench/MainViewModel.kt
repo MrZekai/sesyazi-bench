@@ -101,6 +101,8 @@ data class MainState(
     val readerFont: Int = 19,
     /** Son dökümün aşama süreleri (geliştirici araçlarında gösterilir). */
     val lastTiming: String? = null,
+    /** Son dökümün teşhisi (yalnız geliştirici modunda; metin/anahtar içermez). */
+    val lastDiag: String? = null,
     /** Hızlı modda henüz kesinleşmemiş canlı ara metin (kelime kelime). */
     val livePartial: String? = null,
     /** Motor tercihi: 0 sorulmadı, 1 Hızlı (internet), 2 Gizli (telefonda). */
@@ -334,6 +336,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (!s.alive()) return@launch
                 audio = decoded
                 player.setSource(copy)
+                if (prefs.devMode) _state.update { it.copy(lastDiag = Diagnostics.audio(decoded)) }
                 s.update {
                     it.copy(fileName = name, audioMs = decoded.durationMs, waveform = wave, hasAudio = true, positionMs = 0)
                 }
@@ -652,6 +655,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Wit çıktısına Whisper'ın "uydurma cümle" filtresi UYGULANMAZ (gerçek konuşmayı silebilir)
         var segs = r.segments.mapNotNull { seg -> seg.text.trim().takeIf { it.isNotEmpty() }?.let { seg.copy(text = it) } }
         logTiming(s, r, "Hızlı", "internet", fallback = false, importMs = importMs, cleanCount = segs.size)
+        if (prefs.devMode) _state.update { it.copy(lastDiag = Diagnostics.audio(a) + "\n" + Diagnostics.wit(lang, oc, emptyMap())) }
 
         // Hiçbir parça başarılı olmadı (ya da anahtar geçersiz) → tamamen telefonda
         if (r.error != null || oc.authFailed) {
@@ -659,6 +663,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return CloudResult.FALLBACK
         }
         var mixed = false
+        val fills = mutableMapOf<Int, String>()
         if (oc.failed.isNotEmpty()) {
             mixed = true
             val q = localReadyQuality(st.quality)
@@ -669,11 +674,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val toMs = f.to * 1000L / AudioDecoder.TARGET_RATE
                 var filled: List<Segment>? = null
                 if (q != null) {
-                    val sub = DecodedAudio(a.samples.copyOfRange(f.from, f.to), a.sourceMime, a.sourceRate, a.sourceChannels)
+                    val sub = a.slice(f.from, f.to)
                     val lr = runWhisper(s, sub, modelFor(q), q.beam, fallbackFor(q), langObj, stream = false)
                     if (lr.error == null) {
+                        // Yerel döküm boş dönerse boşluk sessizce kaybolmasın: işaret konur
                         filled = Postprocess.clean(lr.segments).map { it.copy(startMs = it.startMs + fromMs, endMs = it.endMs + fromMs) }
+                            .takeIf { it.isNotEmpty() }
                     }
+                }
+                fills[f.from] = when {
+                    filled != null -> "telefonda tamamlandı (${q?.label}, ${filled.size} parça)"
+                    q == null -> "işaretlendi (hazır yerel model yok; indirme yapılmadı)"
+                    else -> "işaretlendi (yerel döküm başarısız ya da boş)"
                 }
                 segs = segs + (filled ?: listOf(
                     Segment(fromMs, toMs, "[⚠ ${Transcript.clock(fromMs)}–${Transcript.clock(toMs)} arası yazıya dökülemedi]"),
@@ -682,6 +694,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             segs = segs.sortedBy { it.startMs }
         }
         if (!s.alive()) return CloudResult.DONE
+        if (prefs.devMode) {
+            val d = Diagnostics.audio(a) + "\n" + Diagnostics.wit(lang, oc, fills)
+            _state.update { it.copy(lastDiag = d) }
+        }
         if (segs.isEmpty()) {
             // Dil tahmin edildiyse yanlış dilin Wit uygulamasına gitmiş olabilir → telefonda dene
             if (detectPath == "telefon_dili") return CloudResult.FALLBACK
@@ -959,7 +975,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     ?.forEach { it.delete() }
             }
             _state.update {
-                it.copy(history = emptyList(), undoDeleted = null, testLog = emptyList(), lastTiming = null, toast = "Tüm notlar ve dosyalar silindi")
+                it.copy(history = emptyList(), undoDeleted = null, testLog = emptyList(), lastTiming = null, lastDiag = null, toast = "Tüm notlar ve dosyalar silindi")
             }
         }
     }
