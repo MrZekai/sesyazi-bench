@@ -79,8 +79,8 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
         onAccent = SY.OnAccent.toArgb(), badge = SY.Chip.toArgb(),
     )
     AndroidView(
-        factory = { ctx -> NativeViews(ctx) },
-        update = { v -> v.bind(current, colors) },
+        factory = { ctx -> NativeViews(ctx).adView },
+        update = { v -> (v.tag as NativeViews).bind(current, colors) },
         modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SY.Sheet)
             .border(1.dp, SY.Outline, RoundedCornerShape(18.dp)).padding(12.dp),
     )
@@ -88,9 +88,14 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
 
 private data class NativeColors(val text: Int, val muted: Int, val accent: Int, val onAccent: Int, val badge: Int)
 
-/** Klasik View'larla kurulu NativeAdView (Compose'da AndroidView ile gösterilir). */
-private class NativeViews(context: Context) : NativeAdView(context) {
-    private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
+/**
+ * Klasik View'larla kurulu NativeAdView (Compose'da AndroidView ile gösterilir).
+ * NativeAdView final olduğu için kalıtım yerine sarmalanır; tutucu, görünümün tag'inde.
+ */
+private class NativeViews(context: Context) {
+    val adView = NativeAdView(context).also { it.tag = this }
+    private val res = context.resources
+    private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), res.displayMetrics).toInt()
 
     private val badge = TextView(context).apply {
         text = "Reklam"
@@ -143,13 +148,13 @@ private class NativeViews(context: Context) : NativeAdView(context) {
         root.addView(media, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(160)).apply { topMargin = dp(10) })
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         root.addView(cta, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
-        addView(root)
-        headlineView = headline
-        iconView = icon
-        advertiserView = advertiser
-        mediaView = media
-        bodyView = body
-        callToActionView = cta
+        adView.addView(root)
+        adView.headlineView = headline
+        adView.iconView = icon
+        adView.advertiserView = advertiser
+        adView.mediaView = media
+        adView.bodyView = body
+        adView.callToActionView = cta
     }
 
     private var bound: NativeAd? = null
@@ -175,8 +180,8 @@ private class NativeViews(context: Context) : NativeAdView(context) {
         icon.setImageDrawable(img)
         icon.visibility = if (img == null) View.GONE else View.VISIBLE
         val mc = ad.mediaContent
-        if (mc != null) media.mediaContent = mc
+        if (mc != null) media.setMediaContent(mc)
         media.visibility = if (mc == null) View.GONE else View.VISIBLE
-        setNativeAd(ad) // en sonda: gösterim/tıklama takibi bağlanan görünümlere göre yapılır
+        adView.setNativeAd(ad) // en sonda: gösterim/tıklama takibi bağlanan görünümlere göre yapılır
     }
 }
