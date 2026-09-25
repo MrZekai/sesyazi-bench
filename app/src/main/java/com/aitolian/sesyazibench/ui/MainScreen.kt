@@ -140,25 +140,25 @@ fun MainScreen(
     // Geri tuşu: hata ekranından uygulamayı kapatmak yerine başlangıca dön
     BackHandler(enabled = canGoHome) { goHome() }
 
-    Column(Modifier.fillMaxSize().background(SY.Bg).background(SY.background)) {
+    Column(Modifier.fillMaxSize().background(SY.Bg)) {
         Column(
             Modifier.statusBarsPadding().weight(1f).verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             TopBar(onHome = if (canGoHome) goHome else null, onSettings = { showSettings = true })
             if (busy || s.phase is Phase.Failed) {
                 StatusCard(s, busy, onCancel = vm::cancelWork, onRetry = { if (vm.canRetry()) vm.retranscribe() else openWhatsApp() })
             }
-            if (!busy) EntryCard(s, firstUse = s.history.isEmpty(), onWhatsApp = openWhatsApp, onFile = pickFile)
+            if (!busy) Hero(s, firstUse = s.history.isEmpty(), onWhatsApp = openWhatsApp, onFile = pickFile)
             Controls(s, busy, vm)
             if (s.history.isNotEmpty()) SearchEntry { notesMode = NOTES_SEARCH }
             UndoBar(s, vm)
             History(s, vm, onAllNotes = { notesMode = NOTES_LIST })
-            // Ana sayfada banner yerine içerik akışında yerel reklam (notlar ile kılavuz arasında, düğmelerden ayrı)
+            // İçerik akışında tek yerel reklam: notlardan ve düğmelerden ayrı, "Reklam" etiketli
             if (adsReady) NativeAdCard(Modifier.padding(vertical = 4.dp))
             GuideSection(firstUse = s.history.isEmpty())
-            Spacer(Modifier.height(4.dp).navigationBarsPadding())
+            Spacer(Modifier.height(8.dp).navigationBarsPadding())
         }
     }
 }
@@ -166,74 +166,72 @@ fun MainScreen(
 @Composable
 private fun TopBar(onHome: (() -> Unit)?, onSettings: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 4.dp),
+        Modifier.fillMaxWidth().padding(top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onHome != null) {
             IconTap(Icons.AutoMirrored.Filled.ArrowBack, "Ana sayfaya dön", onClick = onHome)
             Spacer(Modifier.width(4.dp))
         } else {
-            // Marka işareti: ses dalgası (düğme değil)
+            // Küçük marka işareti: ses dalgası (düğme değil)
             Box(
-                Modifier.size(36.dp).clip(RoundedCornerShape(11.dp))
+                Modifier.size(32.dp).clip(RoundedCornerShape(10.dp))
                     .background(Brush.linearGradient(listOf(SY.A1, SY.A2))),
                 contentAlignment = Alignment.Center,
-            ) { WaveMark(androidx.compose.ui.graphics.Color.White, 22.dp) }
+            ) { WaveMark(androidx.compose.ui.graphics.Color.White, 20.dp) }
             Spacer(Modifier.width(10.dp))
         }
         Text(
-            stringResource(R.string.app_name), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = SY.Text,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            stringResource(R.string.app_name), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = SY.Text,
+            letterSpacing = (-0.2).sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
         )
         IconTap(Icons.Filled.Settings, "Ayarlar", tint = SY.Muted, onClick = onSettings)
     }
 }
 
 /**
- * Ses girişleri: ne yapacağı adından anlaşılan iki düğme. İlk kullanımda kısa
- * yardım ve düğme alt açıklamaları görünür; not biriktikten sonra kart kısalır
- * (adım adım yardım "Nasıl kullanılır?" altında kalır).
+ * Üst bölüm: tek net vaat + iki anlaşılır eylem. Birincil: WhatsApp'ı aç (paylaşım
+ * oradan yapılır; düğme kendi başına döküm başlatmaz). İkincil: dosya seç.
  */
 @Composable
-private fun EntryCard(s: MainState, firstUse: Boolean, onWhatsApp: () -> Unit, onFile: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(SY.Sheet)
-            .border(1.dp, SY.Outline, RoundedCornerShape(22.dp)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text("Sesli mesajı yazıya dök", color = SY.Text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-        if (firstUse) {
+private fun Hero(s: MainState, firstUse: Boolean, onWhatsApp: () -> Unit, onFile: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            "Dinleyemiyorsan,\noku.", color = SY.Text, fontSize = 32.sp, lineHeight = 36.sp,
+            fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp,
+        )
+        Text(
+            if (firstUse) "WhatsApp'ta sesli mesaja uzun bas → Paylaş → MuteRead. Metin saniyeler içinde hazır."
+            else "Sesli mesajı MuteRead ile paylaş, saniyeler içinde oku.",
+            color = SY.Muted, fontSize = 15.sp, lineHeight = 21.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(18.dp)).background(SY.Accent)
+                .clickable(role = Role.Button, onClickLabel = "WhatsApp'ı aç", onClick = onWhatsApp)
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(Icons.Filled.Chat, contentDescription = null, tint = SY.OnAccent, modifier = Modifier.size(22.dp))
             Text(
-                if (s.engineMode == 1) "WhatsApp'ta sesli mesaja uzun bas → Paylaş → bu uygulamayı seç. Metin saniyeler içinde gelir."
-                else "WhatsApp'ta sesli mesaja uzun bas → Paylaş → bu uygulamayı seç. Ses telefondan çıkmaz.",
-                color = SY.Muted, fontSize = 13.5.sp, lineHeight = 19.sp,
+                "WhatsApp'ı aç", color = SY.OnAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 10.dp),
             )
         }
-        EntryButton(
-            Icons.Filled.Chat, "WhatsApp'ı aç", if (firstUse) "Sesli mesajı oradan paylaş" else null,
-            filled = true, onClick = onWhatsApp,
-        )
-        EntryButton(
-            Icons.Filled.FolderOpen, "Ses / video dosyası seç", if (firstUse) "Ses kayıtları ve videolardaki konuşmalar" else null,
-            filled = false, onClick = onFile,
-        )
-    }
-}
-
-@Composable
-private fun EntryButton(icon: ImageVector, title: String, sub: String?, filled: Boolean, onClick: () -> Unit) {
-    val fg = if (filled) SY.OnAccent else SY.Text
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = if (sub != null) 60.dp else 52.dp).clip(RoundedCornerShape(16.dp))
-            .background(if (filled) SY.Accent else SY.Card)
-            .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null, tint = if (filled) fg else SY.Accent, modifier = Modifier.size(24.dp))
-        Column(Modifier.weight(1f).padding(start = 14.dp)) {
-            Text(title, color = fg, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            if (sub != null) Text(sub, color = if (filled) fg.copy(alpha = .8f) else SY.Muted, fontSize = 12.5.sp)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(18.dp)).background(SY.Sheet)
+                .border(1.dp, SY.Outline, RoundedCornerShape(18.dp))
+                .clickable(role = Role.Button, onClickLabel = "Ses ya da video dosyası seç", onClick = onFile)
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(Icons.Filled.FolderOpen, contentDescription = null, tint = SY.Accent, modifier = Modifier.size(22.dp))
+            Text(
+                "Ses / video dosyası seç", color = SY.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(start = 10.dp),
+            )
         }
     }
 }
@@ -341,12 +339,13 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
 @Composable
 private fun SearchEntry(onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp)).background(SY.Card)
+        Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(RoundedCornerShape(25.dp)).background(SY.Sheet)
+            .border(1.dp, SY.Outline, RoundedCornerShape(25.dp))
             .clickable(role = Role.Button, onClickLabel = "Notlarda ara", onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = SY.Muted, modifier = Modifier.size(22.dp))
+        Icon(Icons.Filled.Search, contentDescription = null, tint = SY.Muted, modifier = Modifier.size(20.dp))
         Text("Notlarda ara", color = SY.Muted, fontSize = 15.sp, modifier = Modifier.padding(start = 10.dp))
     }
 }
@@ -368,21 +367,30 @@ private fun UndoBar(s: MainState, vm: MainViewModel) {
     }
 }
 
-/** Son notlar. Dokun → aç, basılı tut → sil (geri alınabilir). */
+/** Son notlar: tek beyaz yüzeyde hafif satırlar (en fazla 3). Dokun → aç, basılı tut → sil. */
 @Composable
 private fun History(s: MainState, vm: MainViewModel, onAllNotes: () -> Unit) {
     if (s.history.isEmpty()) return
     Column {
-        Row(Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("SON NOTLAR", color = SY.Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Son notlar", color = SY.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Box(
-                Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onAllNotes)
+                Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button, onClick = onAllNotes)
                     .padding(horizontal = 8.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text("Tümü (${s.history.size}) ›", color = SY.Accent, fontSize = 13.5.sp, fontWeight = FontWeight.Medium) }
+            ) { Text("Tümü (${s.history.size})", color = SY.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            s.history.take(5).forEach { t -> NoteCard(t, onOpen = { vm.openHistory(t) }, onDelete = { vm.deleteHistory(t) }) }
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SY.Sheet)
+                .border(1.dp, SY.Outline, RoundedCornerShape(20.dp)),
+        ) {
+            val items = s.history.take(3)
+            items.forEachIndexed { i, t ->
+                NoteRow(t, onOpen = { vm.openHistory(t) }, onDelete = { vm.deleteHistory(t) })
+                if (i < items.lastIndex) {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(SY.Outline))
+                }
+            }
         }
         Text(
             "Silmek için nota basılı tut", fontSize = 12.sp, color = SY.Muted,

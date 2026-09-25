@@ -103,6 +103,9 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
     var devMode by remember { mutableStateOf(vm.prefs.devMode) }
     var notify by remember { mutableStateOf(vm.prefs.notifyWhenDone) }
     var confirmClear by remember { mutableStateOf(false) }
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) vm.toast("Bildirim izni verilmedi; işlem bitince haber verilemez")
+    }
     var showLicenses by remember { mutableStateOf(false) }
 
     LaunchedEffect(refresh) { packs = runCatching { OnDeviceTranslator.downloadedLanguages() }.getOrDefault(emptyList()) }
@@ -218,7 +221,14 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                     }
                     Switch(
                         checked = notify,
-                        onCheckedChange = { notify = it; vm.prefs.notifyWhenDone = it },
+                        onCheckedChange = {
+                            notify = it
+                            vm.prefs.notifyWhenDone = it
+                            // İzin yalnız kullanıcı bu özelliği açınca istenir (Android 13+)
+                            if (it && android.os.Build.VERSION.SDK_INT >= 33 &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        },
                         colors = SwitchDefaults.colors(checkedTrackColor = SY.Accent, checkedThumbColor = SY.OnAccent),
                     )
                 }

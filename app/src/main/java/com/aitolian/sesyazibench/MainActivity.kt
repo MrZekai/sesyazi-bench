@@ -37,7 +37,8 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         Ads.start(this)
-        askNotificationPermissionOnce()
+        // Bildirim izni açılışta SORULMAZ (WhatsApp'tan gelen kullanıcıyı bekletmesin);
+        // Ayarlar'da "İşlem bitince haber ver" açılınca istenir.
         ShareIntegration.publishShareShortcut(this)
         if (savedInstanceState == null) handleShare(intent)
         setContent {
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
                 val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT)
                 else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
-                window.setBackgroundDrawable(ColorDrawable(if (dark) 0xFF0E0B1A.toInt() else 0xFFF6F4FB.toInt()))
+                window.setBackgroundDrawable(ColorDrawable(if (dark) 0xFF0F1115.toInt() else 0xFFF5F6F8.toInt()))
             }
             SesYaziTheme(themeMode) {
                 MainScreen(

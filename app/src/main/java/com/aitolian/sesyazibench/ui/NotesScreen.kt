@@ -3,6 +3,7 @@ package com.aitolian.sesyazibench.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,8 +92,9 @@ fun AllNotesScreen(s: MainState, vm: MainViewModel, focusSearch: Boolean = false
         }
         // Arama kutusu
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).heightIn(min = 52.dp)
-                .clip(RoundedCornerShape(16.dp)).background(SY.Card).padding(start = 14.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).heightIn(min = 50.dp)
+                .clip(RoundedCornerShape(25.dp)).background(SY.Sheet)
+                .border(1.dp, SY.Outline, RoundedCornerShape(25.dp)).padding(start = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Filled.Search, contentDescription = null, tint = SY.Muted, modifier = Modifier.size(22.dp))
@@ -150,33 +152,40 @@ private fun UndoRow(s: MainState, vm: MainViewModel) {
     }
 }
 
-/** Not kartı (ana sayfa ve Tüm notlar). */
-@OptIn(ExperimentalFoundationApi::class)
+/** Not kartı (Tüm notlar): beyaz yüzey, ince kenarlık. */
 @Composable
 internal fun NoteCard(t: Transcript, onOpen: () -> Unit, onDelete: () -> Unit, snippet: AnnotatedString? = null) {
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SY.Sheet)
+            .border(1.dp, SY.Outline, RoundedCornerShape(18.dp)),
+    ) { NoteRow(t, onOpen, onDelete, snippet) }
+}
+
+/** Not satırı: başlık, küçük bilgi satırı, bir-iki satır ön izleme. Dokun → aç, basılı tut → sil. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun NoteRow(t: Transcript, onOpen: () -> Unit, onDelete: () -> Unit, snippet: AnnotatedString? = null) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SY.Card)
+        Modifier.fillMaxWidth()
             .combinedClickable(
                 onClickLabel = "Notu aç", onLongClickLabel = "Notu sil",
                 onClick = onOpen, onLongClick = onDelete,
             )
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        // Başlık tek başına tam genişlik; süre/tarih ayrı küçük satırda (başlık daralmasın)
         Text(
-            titleOf(t), color = SY.Text, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+            titleOf(t), color = SY.Text, fontSize = 16.sp, fontWeight = FontWeight.Medium,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         Text(
-            "${Transcript.clock(t.durationMs)} · ${noteDate(t)}", color = SY.Muted, fontSize = 12.sp,
-            modifier = Modifier.padding(top = 1.dp),
+            "${Transcript.clock(t.durationMs)} · ${noteDate(t)}", color = SY.Muted, fontSize = 13.sp,
+            modifier = Modifier.padding(top = 2.dp),
         )
-        // Ön izleme: arama eşleşmesi; yoksa başlıkta görünen kelimelerden SONRAKİ metin
         val preview: AnnotatedString? = snippet ?: previewAfterTitle(t)?.let { AnnotatedString(it) }
         if (preview != null) {
             Text(
-                preview, color = SY.Muted, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp),
+                preview, color = SY.Muted, fontSize = 14.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp),
             )
         }
     }

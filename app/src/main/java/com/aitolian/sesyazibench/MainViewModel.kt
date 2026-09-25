@@ -113,8 +113,8 @@ data class MainState(
     val readerLine: Int = 1,
     /** Ses çalarken okunan cümleyi takip et. */
     val followAudio: Boolean = true,
-    /** Tema: 0 sistem, 1 açık, 2 koyu. */
-    val themeMode: Int = 0,
+    /** Tema: 0 sistem, 1 açık (varsayılan), 2 koyu. */
+    val themeMode: Int = 1,
     /** İlk bulut aktarımından önce seçim penceresi açık mı. */
     val consentAsk: Boolean = false,
 )

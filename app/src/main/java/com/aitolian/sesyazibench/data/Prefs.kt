@@ -39,7 +39,7 @@ class Prefs(context: Context) {
 
     /** Tema: 0 sistem, 1 açık, 2 koyu. */
     var themeMode: Int
-        get() = p.getInt("theme", 0)
+        get() = p.getInt("theme", 1) // varsayılan: açık tema
         set(v) = p.edit().putInt("theme", v).apply()
 
     /** Geliştirici A/B ölçümü: whisper thread sayısı (0 = otomatik). */

@@ -22,23 +22,27 @@ private class Palette(
     val adBg: Color, val outline: Color, val track: Color, val highlight: Color,
 )
 
-/** Koyu: V1 · Neon Mor (ana metin #F1EEFF / #17132A ≈ 15,8:1). */
+/**
+ * Koyu (2026): nötr kömür zemin, tek vurgu (indigo-mavi). Mor/neon yok.
+ * Metin #ECEEF2 / #16191F ≈ 15:1.
+ */
 private val Dark = Palette(
-    bg = Color(0xFF0E0B1A), bgTop = Color(0xFF2A1450), sheet = Color(0xFF17132A), card = Color(0xFF221C3D),
-    chip = Color(0xFF2A1F4A), chipText = Color(0xFFD6C8FF), text = Color(0xFFF1EEFF), muted = Color(0xFFA39DC4),
-    accent = Color(0xFFB69CFF), onAccent = Color(0xFF12091F), error = Color(0xFFFF8A9A), ok = Color(0xFF7EE0B5),
-    adBg = Color(0xFF0A0814), outline = Color(0x14FFFFFF), track = Color(0x30FFFFFF), highlight = Color(0x40B69CFF),
+    bg = Color(0xFF0F1115), bgTop = Color(0xFF0F1115), sheet = Color(0xFF16191F), card = Color(0xFF1D2128),
+    chip = Color(0xFF232833), chipText = Color(0xFFDDE3FF), text = Color(0xFFECEEF2), muted = Color(0xFFA3A9B4),
+    accent = Color(0xFF8DA2FF), onAccent = Color(0xFF0B1020), error = Color(0xFFFF8A8A), ok = Color(0xFF6FD6A8),
+    adBg = Color(0xFF0C0E12), outline = Color(0xFF2A2F38), track = Color(0xFF353B46), highlight = Color(0x338DA2FF),
 )
 
 /**
- * Açık: aynı mor kimlik, kâğıt beyazı zemin. Metin #1A1530 / #FFFFFF ≈ 17:1,
- * ikincil #5B5575 ≈ 7:1, vurgu #5B3FD9 ≈ 6,6:1 (hesap; cihazda doğrulanmadı).
+ * Açık (varsayılan, 2026): kırık beyaz sayfa, beyaz yüzeyler, koyu mürekkep metin,
+ * tek vurgu #3B5BDB. Metin #14171C / #FFFFFF ≈ 18:1; ikincil #5B6270 ≈ 6:1;
+ * vurgu ≈ 5,9:1 (hesap; cihazda doğrulanmadı).
  */
 private val Light = Palette(
-    bg = Color(0xFFF6F4FB), bgTop = Color(0xFFE9E2FB), sheet = Color(0xFFFFFFFF), card = Color(0xFFEFEBF8),
-    chip = Color(0xFFE7E1F7), chipText = Color(0xFF3B2A7A), text = Color(0xFF1A1530), muted = Color(0xFF5B5575),
-    accent = Color(0xFF5B3FD9), onAccent = Color(0xFFFFFFFF), error = Color(0xFFC0263F), ok = Color(0xFF1B7F52),
-    adBg = Color(0xFFEDE9F6), outline = Color(0x1F1A1530), track = Color(0x2E1A1530), highlight = Color(0x335B3FD9),
+    bg = Color(0xFFF5F6F8), bgTop = Color(0xFFF5F6F8), sheet = Color(0xFFFFFFFF), card = Color(0xFFF0F2F5),
+    chip = Color(0xFFEEF1F6), chipText = Color(0xFF26324D), text = Color(0xFF14171C), muted = Color(0xFF5B6270),
+    accent = Color(0xFF3B5BDB), onAccent = Color(0xFFFFFFFF), error = Color(0xFFC62828), ok = Color(0xFF1B7F52),
+    adBg = Color(0xFFF0F2F5), outline = Color(0xFFE3E6EB), track = Color(0xFFD5D9E0), highlight = Color(0x263B5BDB),
 )
 
 /**
@@ -57,8 +61,9 @@ object SY {
     val ChipText get() = p.chipText
     val Text get() = p.text
     val Muted get() = p.muted
-    val A1 = Color(0xFF7C5CFF)
-    val A2 = Color(0xFFFF4FD8)
+    /** Marka geçişi (ses dalgası işareti, ilerleme çizgisi): indigo → camgöbeği. */
+    val A1 = Color(0xFF4361EE)
+    val A2 = Color(0xFF4CC9F0)
     val Accent get() = p.accent
     val OnAccent get() = p.onAccent
     val Error get() = p.error
@@ -71,7 +76,8 @@ object SY {
     /** Okunan cümle vurgusu. */
     val Highlight get() = p.highlight
 
-    val background: Brush get() = Brush.verticalGradient(0f to BgTop, 0.42f to Bg)
+    /** Düz zemin (eski mor degrade kaldırıldı). */
+    val background: Brush get() = Brush.verticalGradient(listOf(Bg, Bg))
 }
 
 @Composable
@@ -82,7 +88,7 @@ fun isDarkTheme(mode: Int): Boolean = when (mode) {
 }
 
 @Composable
-fun SesYaziTheme(mode: Int = THEME_SYSTEM, content: @Composable () -> Unit) {
+fun SesYaziTheme(mode: Int = THEME_LIGHT, content: @Composable () -> Unit) {
     val dark = isDarkTheme(mode)
     // Alt ağaç okumadan önce yazılır (aynı kompozisyonda ileri yazım)
     if (SY.dark != dark) SY.dark = dark

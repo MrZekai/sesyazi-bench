@@ -1,6 +1,6 @@
 <resources>
     <!-- Açılış zemini temaya uysun (koyu: values-night). Uygulama içi tema seçimi MainActivity'de pencereye de uygulanır. -->
     <style name="Theme.SesYaziBench" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">#FFF6F4FB</item>
+        <item name="android:windowBackground">#FFF5F6F8</item>
     </style>
 </resources>
