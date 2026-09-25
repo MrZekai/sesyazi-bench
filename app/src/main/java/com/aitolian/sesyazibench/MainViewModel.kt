@@ -119,6 +119,12 @@ data class MainState(
     val consentAsk: Boolean = false,
 )
 
+/**
+ * İlk bulut aktarımından önce seçim penceresi. KAPALI: rakipteki gibi sade bilgilendirme
+ * tercih edildi (Ayarlar > Gizlilik + gizlilik politikası). Play itiraz ederse true yapılır.
+ */
+const val ASK_CLOUD_CONSENT = false
+
 const val CONSENT_CANCEL = 0
 const val CONSENT_CLOUD = 1
 const val CONSENT_LOCAL = 2
@@ -537,7 +543,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun transcribe(s: Session, a: DecodedAudio, importMs: Long, forceLocal: Boolean = false) {
         // İlk bulut aktarımından ÖNCE açık seçim (Play kullanıcı verisi politikası):
         // seçim yapılmadan ses gönderilmez; kapatma/geri kabul sayılmaz.
-        if (!forceLocal && cloudAvailable && engineChoice() == 1 && online() && prefs.cloudConsent != CONSENT_CLOUD) {
+        if (ASK_CLOUD_CONSENT && !forceLocal && cloudAvailable && engineChoice() == 1 && online() && prefs.cloudConsent != CONSENT_CLOUD) {
             when (askCloudConsent(s)) {
                 CONSENT_CLOUD -> prefs.cloudConsent = CONSENT_CLOUD
                 CONSENT_LOCAL -> {
