@@ -30,16 +30,51 @@ android {
         }
         externalNativeBuild {
             cmake {
-                arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_static")
+                // 16 KB sayfa boyutu (NDK r27): tüm .so'lar (whisper/ggml varyantları dahil) 16 KB hizalı bağlanır.
+                // CI, üretilen APK'daki her .so'nun LOAD hizalamasını ayrıca denetler.
+                arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_static", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
             }
         }
     }
 
+    // Yükleme (upload) anahtarı: CI'da GitHub secret'lardan gelir; yoksa debug anahtarı
+    // (o zaman çıktı Play'e yüklenemez, yalnız test içindir).
+    val uploadStore = System.getenv("UPLOAD_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (uploadStore != null) create("upload") {
+            storeFile = uploadStore
+            storePassword = System.getenv("UPLOAD_STORE_PASSWORD")
+            keyAlias = System.getenv("UPLOAD_KEY_ALIAS")
+            keyPassword = System.getenv("UPLOAD_KEY_PASSWORD")
+        }
+    }
+
+    // Reklam kimlikleri: debug HER ZAMAN Google test kimlikleri; release, secret varsa
+    // gerçek kimlikler, yoksa yine test kimlikleri.
+    val testApp = "ca-app-pub-3940256099942544~3347511713"
+    val testBanner = "ca-app-pub-3940256099942544/9214589741"
+    val testInterstitial = "ca-app-pub-3940256099942544/1033173712"
+    val testNative = "ca-app-pub-3940256099942544/2247696110"
+    fun env(name: String, fallback: String) = System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() } ?: fallback
+    fun q(v: String) = "\"" + v.replace("\\", "").replace("\"", "") + "\""
+
     buildTypes {
+        debug {
+            manifestPlaceholders["admobAppId"] = testApp
+            buildConfigField("String", "ADMOB_BANNER", q(testBanner))
+            buildConfigField("String", "ADMOB_INTERSTITIAL", q(testInterstitial))
+            buildConfigField("String", "ADMOB_NATIVE", q(testNative))
+            buildConfigField("String", "ADMOB_TEST_DEVICES", q(""))
+        }
         release {
-            // Benchmark derlemesi: native kod optimize, imza debug anahtarıyla (Play'e yüklenmez)
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (uploadStore != null) signingConfigs.getByName("upload") else signingConfigs.getByName("debug")
+            manifestPlaceholders["admobAppId"] = env("ADMOB_APP_ID", testApp)
+            buildConfigField("String", "ADMOB_BANNER", q(env("ADMOB_BANNER_ID", testBanner)))
+            buildConfigField("String", "ADMOB_INTERSTITIAL", q(env("ADMOB_INTERSTITIAL_ID", testInterstitial)))
+            buildConfigField("String", "ADMOB_NATIVE", q(env("ADMOB_NATIVE_ID", testNative)))
+            // Kendi test telefonlarında gerçek reklama tıklamamak için (virgülle ayrılmış cihaz kimlikleri)
+            buildConfigField("String", "ADMOB_TEST_DEVICES", q(env("ADMOB_TEST_DEVICE_IDS", "")))
         }
     }
 

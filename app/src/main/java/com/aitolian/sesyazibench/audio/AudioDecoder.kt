@@ -23,7 +23,11 @@ object AudioDecoder {
      * yapılır; uzun videolarda bile bellek kaynak hızına göre değil 16 kHz'e
      * göre büyür.
      */
-    fun decode(context: Context, uri: Uri, cancelled: () -> Boolean = { false }): DecodedAudio {
+    /**
+     * @param channelPick ≥ 0 ise çok kanallı seste yalnız o kanal alınır. Normalde -1
+     *   (ortalama). Çağıran, teşhisteki faz oranı zıt fazı gösterirse bununla yeniden çözer.
+     */
+    fun decode(context: Context, uri: Uri, cancelled: () -> Boolean = { false }, channelPick: Int = -1): DecodedAudio {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
@@ -64,7 +68,7 @@ object AudioDecoder {
             val expectedOut = if (format.containsKey(MediaFormat.KEY_DURATION))
                 (format.getLong(MediaFormat.KEY_DURATION) / 1_000_000.0 * TARGET_RATE).toInt() + TARGET_RATE else 0
             var resampler = StreamResampler(inRate, TARGET_RATE, expectedOut)
-            val downmix = Downmix()
+            val downmix = Downmix(channelPick)
             val info = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
@@ -134,6 +138,7 @@ object AudioDecoder {
                 sourceDurationMs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) / 1000 else -1,
                 decodedSamples = pcm.size,
                 monoPhaseRatio = downmix.phaseRatio,
+                channelPicked = if (channels >= 2) channelPick else -1,
             )
             return DecodedAudio(pcm, mime, inRate, channels, audioInfo)
         } finally {

@@ -29,6 +29,8 @@ data class Transcript(
     val previewMs: Long = 0,
     /** Metni üreten kalite (Quality.name); eski kayıtlarda boş. */
     val quality: String? = null,
+    /** Doğrulanamayan bölümler (ör. kesinleşmeyen tekrar); kullanıcıya gösterilir. */
+    val warnings: List<RangeWarning> = emptyList(),
 ) {
     val rawText: String get() = segments.joinToString(" ") { it.text }
     val text: String get() = editedText ?: rawText
@@ -48,6 +50,14 @@ data class Transcript(
         private fun srtTime(ms: Long) = "%02d:%02d:%02d,%03d".format(
             Locale.US, ms / 3_600_000, (ms / 60_000) % 60, (ms / 1000) % 60, ms % 1000,
         )
+    }
+}
+
+/** Notun bir bölümü tam doğrulanamadı. [reason]: sabit kod (ör. [UNCONFIRMED_REPEAT]). */
+data class RangeWarning(val fromMs: Long, val toMs: Long, val reason: String) {
+    companion object {
+        /** Aynı satır yeniden başlamış görünüyor ama motor kesinleştirmedi. */
+        const val UNCONFIRMED_REPEAT = "UNCONFIRMED_REPEAT"
     }
 }
 
@@ -159,6 +169,11 @@ object HistoryStore {
                     .put("language", tr.language).put("processMs", tr.processMs).put("segments", segs)
                     .put("rev", tr.revision).put("pms", tr.previewMs)
                     .apply { tr.quality?.let { put("q", it) } }
+                    .apply {
+                        if (tr.warnings.isNotEmpty()) put("w", JSONArray().apply {
+                            tr.warnings.forEach { w -> put(JSONObject().put("s", w.fromMs).put("e", w.toMs).put("r", w.reason)) }
+                        })
+                    }
                     .apply { tr.editedText?.let { put("edited", it) } },
             )
         }
@@ -184,6 +199,11 @@ object HistoryStore {
                 revision = o.optInt("rev", 0),
                 previewMs = o.optLong("pms", 0),
                 quality = o.optString("q").ifEmpty { null },
+                warnings = o.optJSONArray("w")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { j ->
+                        arr.optJSONObject(j)?.let { w -> RangeWarning(w.optLong("s"), w.optLong("e"), w.optString("r")) }
+                    }
+                } ?: emptyList(),
             )
         }
     }

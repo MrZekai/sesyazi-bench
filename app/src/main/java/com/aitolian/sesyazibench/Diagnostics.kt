@@ -33,6 +33,7 @@ object Diagnostics {
             append(" · kaynak ${i.sourceDurationMs} ms · fark ${if (diff >= 0) "+" else ""}$diff ms")
         }
         append('\n')
+        if (i.channelPicked >= 0) append("  UYARI: kanallar zıt fazlıydı → yalnız kanal #${i.channelPicked} kullanıldı\n")
         if (i.monoPhaseRatio >= 0) {
             append("  mono/kanal enerji oranı: ${f2(i.monoPhaseRatio)}")
             if (i.monoPhaseRatio < 0.3) append(" · UYARI: kanallar büyük ölçüde zıt fazlı, mono toplamda ses sönümlenebilir")
@@ -53,6 +54,7 @@ object Diagnostics {
             append("  #${c.index + 1} ${clock(c.fromMs)}–${clock(c.toMs)} · ${c.samples} örnek/${c.bytes} B · rms ${f2(c.rms * 100)}% (tepe ${f2(c.peakRms * 100)}%)\n")
             append("     denemeler: ${c.codes.joinToString(" → ").ifEmpty { "-" }}")
             append(" · olay ${c.events} · final gelen ${c.finalsIn} / saklanan ${c.finalsKept}")
+            if (c.unknownEvents > 0) append(" · tanınmayan nesne ${c.unknownEvents}")
             if (c.dupDropped > 0) append(" · tekrar atılan ${c.dupDropped} (aynı metin+aynı geçerli zaman)")
             if (c.echoIgnored > 0) append(" · yankı sayılan ara metin ${c.echoIgnored}")
             if (c.unconfirmedRepeat > 0) append(" · UYARI: finali gelmeyen tekrar ara metni ${c.unconfirmedRepeat} (doğrulanamadı)")

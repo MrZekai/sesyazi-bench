@@ -98,6 +98,28 @@ class WitStreamTest {
         expectCode(WIT_ERR_EMPTY) { WitStreamState().finish() }
     }
 
+    @Test fun unknownObjectOnlyIsSchemaErrorNotSuccess() {
+        val st = WitStreamState()
+        st.onEvent(parseWitEvent("{}"))
+        expectCode(WIT_ERR_SCHEMA) { st.finish() }
+        assertEquals(1, st.unknownEvents)
+    }
+
+    @Test fun metadataIsIgnoredButValidFinalStillCounts() {
+        val st = WitStreamState()
+        st.onEvent(parseWitEvent("""{"meta":{"id":"x"}}"""))
+        st.onEvent(parseWitEvent("""{"text":"merhaba","is_final":true}"""))
+        st.finish()
+        assertEquals(1, st.finals.size)
+        assertEquals(1, st.unknownEvents)
+    }
+
+    @Test fun transcriptionWithoutAnyFinalIsNoFinal() {
+        val st = WitStreamState()
+        st.onEvent(parseWitEvent("""{"text":"","is_final":false}"""))
+        expectCode(WIT_ERR_NO_FINAL) { st.finish() }
+    }
+
     @Test fun validNoTextResponseIsSuccessWithoutFinals() {
         val st = WitStreamState()
         st.onEvent(parseWitEvent("""{"text":"","is_final":true}"""))

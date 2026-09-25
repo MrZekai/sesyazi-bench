@@ -27,6 +27,8 @@ data class AudioInfo(
     val sourceDurationMs: Long,
     val decodedSamples: Int,
     val monoPhaseRatio: Double,
+    /** ≥ 0: zıt faz nedeniyle yalnız bu kanal kullanıldı; -1: kanal ortalaması. */
+    val channelPicked: Int = -1,
 ) {
     val decodedMs: Long get() = decodedSamples * 1000L / AUDIO_RATE
 }

@@ -96,6 +96,13 @@ class AudioDspTest {
         assertTrue(d.phaseRatio < 0.05)                    // teşhiste görünür
     }
 
+    @Test fun antiPhaseWithChannelPickKeepsSignal() {
+        val t = tone(AUDIO_RATE, 500.0, 1.0)
+        val inv = FloatArray(t.size) { -t[it] }
+        val m = Downmix(pick = 0).toMono(stereoPcm16(t, inv), 2, false)
+        assertEquals(rms(t), rms(m), 0.01)                 // tek kanal: ses korunur
+    }
+
     @Test fun speechOnOneChannelIsHalvedNotLost() {
         val t = tone(AUDIO_RATE, 500.0, 1.0)
         val d = Downmix()

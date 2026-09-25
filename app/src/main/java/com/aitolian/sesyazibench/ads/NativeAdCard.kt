@@ -19,6 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,23 +55,17 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var ad by remember { mutableStateOf<NativeAd?>(null) }
 
+    // Yükleme: ekran açıkken sınırlı, artan beklemeli yeniden deneme (ağ geri gelirse
+    // toparlanır; istek fırtınası yok). Ekrandan çıkınca döngü ve reklam kapanır.
+    LaunchedEffect(Unit) {
+        for (attempt in 0 until NATIVE_TRIES) {
+            val n = loadNative(context)
+            if (n != null) { ad?.destroy(); ad = n; return@LaunchedEffect }
+            if (attempt < NATIVE_TRIES - 1) delay(NATIVE_RETRY_MS * (attempt + 1))
+        }
+    }
     DisposableEffect(Unit) {
-        var alive = true
-        val loader = AdLoader.Builder(context, Ads.NATIVE_ID)
-            .forNativeAd { n -> if (alive) { ad?.destroy(); ad = n } else n.destroy() }
-            .withAdListener(object : AdListener() {
-                override fun onAdFailedToLoad(error: LoadAdError) { Log.w("Ads", "native load: ${error.message}") }
-            })
-            .withNativeAdOptions(
-                NativeAdOptions.Builder()
-                    .setAdChoicesPlacement(NativeAdOptions.ADCHOICES_TOP_RIGHT)
-                    .setMediaAspectRatio(NativeAdOptions.NATIVE_MEDIA_ASPECT_RATIO_LANDSCAPE)
-                    .build(),
-            )
-            .build()
-        loader.loadAd(AdRequest.Builder().build())
         onDispose {
-            alive = false
             ad?.destroy()
             ad = null
         }
@@ -84,6 +82,29 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SY.Sheet)
             .border(1.dp, SY.Outline, RoundedCornerShape(18.dp)).padding(12.dp),
     )
+}
+
+private const val NATIVE_TRIES = 3
+private const val NATIVE_RETRY_MS = 20_000L
+
+/** Tek yükleme denemesi; başarısızsa null. İptal edilirse gelen reklam yok edilir. */
+private suspend fun loadNative(context: Context): NativeAd? = suspendCancellableCoroutine { cont ->
+    val loader = AdLoader.Builder(context, Ads.NATIVE_ID)
+        .forNativeAd { n -> if (cont.isActive) cont.resume(n) else n.destroy() }
+        .withAdListener(object : AdListener() {
+            override fun onAdFailedToLoad(error: LoadAdError) {
+                Log.w("Ads", "native load: ${error.message}")
+                if (cont.isActive) cont.resume(null)
+            }
+        })
+        .withNativeAdOptions(
+            NativeAdOptions.Builder()
+                .setAdChoicesPlacement(NativeAdOptions.ADCHOICES_TOP_RIGHT)
+                .setMediaAspectRatio(NativeAdOptions.NATIVE_MEDIA_ASPECT_RATIO_LANDSCAPE)
+                .build(),
+        )
+        .build()
+    loader.loadAd(AdRequest.Builder().build())
 }
 
 private data class NativeColors(val text: Int, val muted: Int, val accent: Int, val onAccent: Int, val badge: Int)

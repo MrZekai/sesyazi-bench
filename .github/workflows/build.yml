@@ -45,21 +45,57 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:testReleaseUnitTest --stacktrace
 
-      - name: Build release APK (native -O3, debug imzalı)
+      - name: Yükleme anahtarı (secret varsa)
+        env:
+          UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$UPLOAD_KEYSTORE_B64" ]; then
+            printf '%s' "$UPLOAD_KEYSTORE_B64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "UPLOAD_KEYSTORE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+            echo "Yükleme anahtarıyla imzalanacak"
+          else
+            echo "UPLOAD_KEYSTORE_B64 yok → debug anahtarı (Play'e yüklenemez)"
+          fi
+
+      - name: Build release APK + AAB
         env:
           # Hızlı mod anahtarları (Settings → Secrets → Actions → WIT_TOKENS)
           WIT_TOKENS: ${{ secrets.WIT_TOKENS }}
+          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+          # Gerçek reklam kimlikleri (yoksa test kimlikleri kullanılır)
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+          ADMOB_BANNER_ID: ${{ secrets.ADMOB_BANNER_ID }}
+          ADMOB_INTERSTITIAL_ID: ${{ secrets.ADMOB_INTERSTITIAL_ID }}
+          ADMOB_NATIVE_ID: ${{ secrets.ADMOB_NATIVE_ID }}
+          ADMOB_TEST_DEVICE_IDS: ${{ secrets.ADMOB_TEST_DEVICE_IDS }}
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --stacktrace
+          ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
 
-      - name: Rename APK
+      - name: Rename outputs
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/app-release.apk "out/SesYaziBench-${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "out/MuteRead-${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "out/MuteRead-${GITHUB_RUN_NUMBER}.aab"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SesYaziBench-apk-${{ github.run_number }}
-          path: out/*.apk
+          name: MuteRead-${{ github.run_number }}
+          path: out/*
           retention-days: 30
+
+      # Çıktılar yüklendikten SONRA: uyumsuzlukta derleme kırmızı olur ama APK yine indirilebilir
+      - name: 16 KB hizalama denetimi (APK içindeki her .so)
+        run: |
+          mkdir -p so && unzip -o -q app/build/outputs/apk/release/app-release.apk 'lib/*' -d so
+          bad=0
+          for f in $(find so/lib -name '*.so'); do
+            ok=1
+            for align in $(readelf -lW "$f" | awk '$1=="LOAD"{print $NF}'); do
+              [ $((align)) -ge 16384 ] || ok=0
+            done
+            if [ $ok -eq 1 ]; then echo "tamam: $(basename $f)"; else echo "UYUMSUZ: $(basename $f)"; bad=1; fi
+          done
+          [ $bad -eq 0 ] || { echo "16 KB hizalama başarısız"; exit 1; }

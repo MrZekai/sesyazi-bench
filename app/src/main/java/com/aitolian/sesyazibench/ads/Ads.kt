@@ -22,13 +22,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * AdMob — ŞU AN YALNIZCA GOOGLE TEST ID'LERİ.
- * Gerçek ID'ler sadece production derlemesinde, ayrı bir adımda eklenecek.
+ * AdMob. Kimlikler derlemeden gelir (app/build.gradle.kts): debug her zaman Google
+ * test kimlikleri; release, GitHub secret'ları varsa gerçek kimlikler.
  */
 object Ads {
-    const val BANNER_ID = "ca-app-pub-3940256099942544/9214589741"        // test: adaptive banner
-    const val INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712"  // test: interstitial
-    const val NATIVE_ID = "ca-app-pub-3940256099942544/2247696110"        // test: native advanced
+    val BANNER_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_BANNER
+    val INTERSTITIAL_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_INTERSTITIAL
+    val NATIVE_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_NATIVE
 
     // Geçiş reklamı sınırları (her döküm başında denenir; bu sınırlar aşırılığı önler)
     private const val MIN_GAP_MS = 60_000L          // iki reklam arası en az 60 sn
@@ -65,6 +65,14 @@ object Ads {
     private fun initSdk(activity: Activity) {
         if (!started.compareAndSet(false, true)) return
         appContext = activity.applicationContext
+        // Geliştiricinin kendi telefonları: gerçek kimlikle derlense bile test reklamı alır
+        val testDevices = com.aitolian.sesyazibench.BuildConfig.ADMOB_TEST_DEVICES
+            .split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        if (testDevices.isNotEmpty()) {
+            MobileAds.setRequestConfiguration(
+                com.google.android.gms.ads.RequestConfiguration.Builder().setTestDeviceIds(testDevices).build(),
+            )
+        }
         MobileAds.initialize(activity.applicationContext) {
             main.post {
                 _ready.value = true
@@ -138,23 +146,47 @@ object Ads {
     /** Geriye dönük uyumluluk; sayaç artık gösterimde tutuluyor. */
     fun onTranscriptionDone() {}
 
+    /** Tam ekran reklam şu an ekranda mı (aynı anda ikinci gösterim olmasın). */
+    @Volatile private var showing = false
+    @Volatile private var showingSince = 0L
+
+    /**
+     * Kota yalnız GERÇEK gösterimde (onAdShowedFullScreenContent) bir kez artar;
+     * gösterilemeyen reklam 60 sn / saatlik kotayı tüketmez.
+     */
     private fun showIfAllowed(activity: Activity) {
         val now = System.currentTimeMillis()
+        // Kapanış geri çağrısı hiç gelmezse (etkinlik yok edildi vb.) kilit 5 dk sonra düşer
+        if (showing && now - showingSince < 300_000L) return
         val times = recentShows(activity, now)
         val last = times.maxOrNull()
         val allowed = (last == null || now - last >= MIN_GAP_MS) && times.size < MAX_PER_HOUR
         val ad = interstitial
         if (!allowed || ad == null) return
         interstitial = null // tek kullanımlık nesne: gösterimden önce tüket
+        val appCtx = activity.applicationContext
+        var counted = false
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-            override fun onAdDismissedFullScreenContent() { loadInterstitial() }
+            override fun onAdShowedFullScreenContent() {
+                if (counted) return
+                counted = true
+                val shownAt = System.currentTimeMillis()
+                val actual = recentShows(appCtx, shownAt)
+                actual += shownAt
+                saveShows(appCtx, actual)
+            }
+            override fun onAdDismissedFullScreenContent() {
+                showing = false
+                loadInterstitial()
+            }
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                showing = false
                 Log.w("Ads", "interstitial show: ${error.message}")
                 loadInterstitial()
             }
         }
-        times += now
-        saveShows(activity, times)
+        showing = true
+        showingSince = now
         ad.show(activity)
     }
 }

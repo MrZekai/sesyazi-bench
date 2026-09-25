@@ -15,6 +15,7 @@ import com.aitolian.sesyazibench.data.Exports
 import com.aitolian.sesyazibench.data.HistoryStore
 import com.aitolian.sesyazibench.data.Prefs
 import com.aitolian.sesyazibench.data.SpeedStore
+import com.aitolian.sesyazibench.data.RangeWarning
 import com.aitolian.sesyazibench.data.Transcript
 import com.aitolian.sesyazibench.engine.EngineResult
 import com.aitolian.sesyazibench.engine.Lang
@@ -114,6 +115,9 @@ data class MainState(
     /** Tema: 0 sistem, 1 açık, 2 koyu. */
     val themeMode: Int = 0,
 )
+
+/** Mono/kanal enerji oranı bunun altındaysa (zıt fazlı stereo) tek kanal kullanılır. */
+private const val ANTI_PHASE_RATIO = 0.1
 
 /** Wit.ai ile üretilen notların kalite etiketi. */
 const val QUALITY_WIT = "WIT"
@@ -326,8 +330,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val name = withContext(Dispatchers.IO) { displayName(uri) }
                 val copy = withContext(Dispatchers.IO) { copyToCache(uri, name, s) }
                     ?: throw DecodeException("Dosya çok büyük (en fazla $MAX_FILE_MB MB)")
-                val decoded = withContext(Dispatchers.IO) {
-                    AudioDecoder.decode(ctx, Uri.fromFile(copy)) { !s.alive() }
+                var decoded = withContext(Dispatchers.IO) {
+                    AudioDecoder.decode(ctx, Uri.fromFile(copy), { !s.alive() })
+                }
+                // Kanallar büyük ölçüde zıt fazlıysa ortalama sesi siler: yalnız sol kanalla
+                // yeniden çöz (ölçülmüş, nadir durum; her dosyada "en yüksek kanal" seçilmez)
+                val phase = decoded.info?.monoPhaseRatio ?: -1.0
+                if (phase in 0.0..ANTI_PHASE_RATIO) {
+                    decoded = withContext(Dispatchers.IO) {
+                        AudioDecoder.decode(ctx, Uri.fromFile(copy), { !s.alive() }, channelPick = 0)
+                    }
                 }
                 if (decoded.samples.size < AudioDecoder.TARGET_RATE / 2) {
                     throw DecodeException("Ses çok kısa (en az yarım saniye olmalı)")
@@ -613,6 +625,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun transcribeCloud(s: Session, a: DecodedAudio, importMs: Long): CloudResult {
         val st = state.value
+        // Gösterilen süre: dil bulma + internet + gerekirse telefonda tamamlama (monoton saat)
+        val processingStartedAt = SystemClock.elapsedRealtime()
         // Dil: seçiliyse o; otomatikse küçük modelle telefonda bulunur. Küçük model
         // yoksa telefonun dili (Wit'te varsa), o da yoksa İngilizce VARSAYILIR (kullanıcıya söylenir).
         var detectMs = 0L
@@ -710,14 +724,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             fileName = st.fileName ?: state.value.fileName ?: "ses",
             durationMs = a.durationMs,
             language = lang,
-            processMs = r.transcribeMs,
             segments = segs,
+            processMs = SystemClock.elapsedRealtime() - processingStartedAt,
             quality = if (mixed) QUALITY_WIT_MIX else QUALITY_WIT,
+            warnings = oc.uncertain.map {
+                RangeWarning(
+                    it.from * 1000L / AudioDecoder.TARGET_RATE, it.to * 1000L / AudioDecoder.TARGET_RATE,
+                    RangeWarning.UNCONFIRMED_REPEAT,
+                )
+            },
         )
         if (!s.alive()) return CloudResult.DONE
         val h = HistoryStore.add(ctx, t)
         val note = when {
             mixed && segs.any { it.text.startsWith("[⚠") } -> "Bazı bölümler yazıya dökülemedi; notta işaretlendi"
+            t.warnings.isNotEmpty() -> "Bir bölüm tam doğrulanamadı; notun altında işaretlendi"
             mixed -> "Bir bölüm internetle dökülemedi; telefonda tamamlandı"
             detectPath == "telefon_dili" ->
                 "Dil algılanamadı; ${langOf(lang)?.label ?: lang} varsayıldı. Yanlışsa ⋮ menüsünden dili değiştir."
@@ -778,6 +799,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // Tekrar Turbo denemesi önceki Turbo süresini "ön izleme" diye yazmasın.
                 previewMs = if (latest.quality == Quality.BEST.name) latest.previewMs else latest.processMs,
                 quality = Quality.BEST.name,
+                warnings = emptyList(), // tüm metin yeniden üretildi
             )
         }
         if (upd == null) {
@@ -800,6 +822,69 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Ses artık yoksa (geçmişten açılmış not) çalışmaz.
      */
     fun refineWithBest() = startBestRefinement(allowExistingBest = false, model = null, fallback = null)
+
+    /**
+     * Doğrulanamayan bölümü kullanıcı isteğiyle yeniden döker (Hızlı mod, tek parça).
+     * Yalnız o aralıktaki parçalar yenisiyle DEĞİŞTİRİLİR — eski ve yeni metin yan
+     * yana eklenmez. Yeni döküm yine belirsizse uyarı kalır; metin dönmezse ya da hata
+     * olursa eski metin aynen korunur.
+     */
+    fun retryWarning(w: RangeWarning) {
+        val a = audio ?: run { toast("Bu notun sesi artık yok; sesi yeniden paylaşman gerekiyor"); return }
+        val cur = state.value.result ?: return
+        if (cur.editedText != null) { toast("Düzenlenmiş notta bölüm yeniden dökülemez"); return }
+        if (isWorking) { toast("Önce mevcut işlem bitsin"); return }
+        val wit = WitEngine.forLang(cur.language) ?: run { toast("Bu dil için hızlı mod yok"); return }
+        if (!online()) { toast("Bunun için internet bağlantısı gerekiyor"); return }
+        val s = newSession()
+        translateJob?.cancel()
+        _state.update {
+            it.copy(
+                tab = Tab.TEXT, translation = null, translating = null,
+                refining = "Bölüm yeniden dökülüyor (${Transcript.clock(w.fromMs)}–${Transcript.clock(w.toMs)})…",
+            )
+        }
+        s.job = viewModelScope.launch {
+            try {
+                val from = (w.fromMs * AudioDecoder.TARGET_RATE / 1000).toInt().coerceIn(0, a.samples.size)
+                val to = (w.toMs * AudioDecoder.TARGET_RATE / 1000).toInt().coerceIn(from, a.samples.size)
+                val oc = wit.transcribe(a.slice(from, to), cur.language, s.cancelled)
+                if (!s.alive()) return@launch
+                val fresh = oc.result.segments.mapNotNull { seg ->
+                    seg.text.trim().takeIf { it.isNotEmpty() }?.let {
+                        seg.copy(startMs = seg.startMs + w.fromMs, endMs = seg.endMs + w.fromMs, text = it)
+                    }
+                }
+                if (oc.result.error != null || oc.failed.isNotEmpty() || fresh.isEmpty()) {
+                    s.update { it.copy(refining = null, toast = "Bölüm yeniden dökülemedi; mevcut metin korundu") }
+                    return@launch
+                }
+                val stillUncertain = oc.uncertain.isNotEmpty()
+                val upd = HistoryStore.update(ctx, cur.id) { latest ->
+                    if (latest.editedText != null) latest else {
+                        val kept = latest.segments.filter { it.startMs < w.fromMs || it.startMs >= w.toMs }
+                        latest.copy(
+                            segments = (kept + fresh).sortedBy { it.startMs },
+                            warnings = if (stillUncertain) latest.warnings else latest.warnings - w,
+                            revision = latest.revision + 1, // eski çeviri yeni metne karışmasın
+                        )
+                    }
+                }
+                if (upd == null) { s.update { it.copy(refining = null) }; return@launch }
+                val (h, nt) = upd
+                s.update {
+                    if (it.result?.id == nt.id) it.copy(
+                        result = nt, history = h, refining = null,
+                        toast = if (stillUncertain) "Yeniden döküldü ama bölüm yine tam doğrulanamadı" else "Bölüm yeniden döküldü",
+                    ) else it.copy(history = h, refining = null)
+                }
+            } catch (t: CancellationException) {
+                throw t
+            } catch (t: Throwable) {
+                s.update { it.copy(refining = null, toast = "Bölüm yeniden dökülemedi; mevcut metin korundu") }
+            }
+        }
+    }
 
     /** Aynı ses üzerinde q5/q8 ve fallback A/B deneyi; mevcut not korunur. */
     fun rerunBestExperiment(q8: Boolean, fallback: Boolean) {

@@ -19,9 +19,24 @@ internal const val WIT_ERR_INVALID = "WIT_INVALID_JSON"
 internal const val WIT_ERR_SERVICE = "WIT_ERROR"
 /** HTTP 200 ama gövdede hiç protokol olayı yok (boş / yalnız boşluk). */
 internal const val WIT_ERR_EMPTY = "WIT_EMPTY_BODY"
+/** Gövdede JSON var ama hiçbiri tanınan bir transkripsiyon olayı değil (ör. yalnız `{}`). */
+internal const val WIT_ERR_SCHEMA = "WIT_UNKNOWN_EVENTS"
+/** Transkripsiyon olayları geldi ama hiçbiri final değil (akış sonlandırılmadı). */
+internal const val WIT_ERR_NO_FINAL = "WIT_NO_FINAL"
 
-/** Tek akış olayı. start/end: belirteç zamanları (ms, parçaya göre); yoksa -1. */
-internal class WitEvent(val text: String, val isFinal: Boolean, val start: Long, val end: Long) {
+/**
+ * Tek akış olayı. start/end: belirteç zamanları (ms varsayılır, parçaya göre); yoksa -1.
+ * [recognized] = tanınan transkripsiyon olayı ("text", "is_final" ya da
+ * PARTIAL/FINAL_TRANSCRIPTION türü taşıyor). Tanınmayan nesneler (ör. `{}`,
+ * bilinmeyen üst veri) sayılır ama metin/final kanıtı sayılmaz.
+ */
+internal class WitEvent(
+    val text: String,
+    val isFinal: Boolean,
+    val start: Long,
+    val end: Long,
+    val recognized: Boolean = true,
+) {
     /** Zaman aralığı kullanılabilir mi (bilinmeyen zaman "aynı olay" kanıtı sayılmaz). */
     val hasTimes: Boolean get() = start >= 0 && end > start
 }
@@ -29,9 +44,12 @@ internal class WitEvent(val text: String, val isFinal: Boolean, val start: Long,
 internal fun parseWitEvent(json: String): WitEvent {
     val o = try { JSONObject(json) } catch (_: JSONException) { throw IOException(WIT_ERR_INVALID) }
     if (o.has("error")) throw IOException(WIT_ERR_SERVICE)
+    val type = o.optString("type")
+    val recognized = o.has("text") || o.has("is_final") ||
+        type.equals("FINAL_TRANSCRIPTION", ignoreCase = true) || type.equals("PARTIAL_TRANSCRIPTION", ignoreCase = true)
+    if (!recognized) return WitEvent("", false, -1, -1, recognized = false)
     val text = o.optString("text").trim()
-    val isFinal = o.optBoolean("is_final", false) ||
-        o.optString("type").equals("FINAL_TRANSCRIPTION", ignoreCase = true)
+    val isFinal = o.optBoolean("is_final", false) || type.equals("FINAL_TRANSCRIPTION", ignoreCase = true)
     var start = -1L
     var end = -1L
     o.optJSONObject("speech")?.optJSONArray("tokens")?.let { toks ->
@@ -54,10 +72,15 @@ internal fun parseWitEvent(json: String): WitEvent {
  *  - Son finalle aynı metinli ara metin: zamanları geçerli ve aynıysa yankı sayılır.
  *    Değilse yeni söyleyiş olabilir → bekleyen ara metin (canlı gösterilir); final
  *    gelirse ikinci söyleyiş korunur. Akış bu ara metin kesinleşmeden biterse
- *    "tamamlandı" sayılmaz ama parça da düşürülmez: [unconfirmedRepeat] olarak
- *    teşhiste görünür. (Belirsiz: Wit'in finalden sonra aynı metinli yankı ara metni
- *    gönderip göndermediği resmi belgede doğrulanamadı; hata saymak her parçayı
- *    boşuna 3 kez yeniden gönderip kotayı tüketebilirdi.)
+ *    ara metin kesin metin olarak EKLENMEZ, kesinleşmiş metin korunur ve parça
+ *    [unconfirmedRepeat] ile "belirsiz" işaretlenir → notta ve ekranda uyarı olur,
+ *    kullanıcı isterse o bölümü yeniden döker. (Wit'in finalden sonra aynı metinli
+ *    yankı ara metni gönderip göndermediği belgede doğrulanamadı; bu yüzden ne kör
+ *    yeniden deneme yapılır ne de "söz kayboldu" denir.)
+ *
+ * Akış sonu doğrulaması ([finish]): hiç olay yok → [WIT_ERR_EMPTY]; olay var ama
+ * tanınan transkripsiyon yok → [WIT_ERR_SCHEMA]; transkripsiyon var ama final yok →
+ * [WIT_ERR_NO_FINAL]. Metni boş bir FINAL ise geçerli "konuşma yok" yanıtıdır.
  */
 internal class WitStreamState {
     val finals = mutableListOf<WitEvent>()
@@ -65,6 +88,9 @@ internal class WitStreamState {
     private var pendingRepeat = false
 
     var events = 0; private set
+    /** Tanınmayan JSON nesneleri (üst veri vb.). */
+    var unknownEvents = 0; private set
+    var transcriptionEvents = 0; private set
     var finalsIn = 0; private set
     var dupDropped = 0; private set
     var echoIgnored = 0; private set
@@ -75,6 +101,8 @@ internal class WitStreamState {
 
     fun onEvent(ev: WitEvent) {
         events++
+        if (!ev.recognized) { unknownEvents++; return }
+        transcriptionEvents++
         val last = finals.lastOrNull()
         if (ev.isFinal) {
             finalsIn++
@@ -98,12 +126,12 @@ internal class WitStreamState {
         pendingRepeat = false
     }
 
-    /**
-     * Akış sonu. Kesinleşmemiş ara metin kaldıysa hata; hiç olay yoksa
-     * [WIT_ERR_EMPTY] (boş gövde "konuşma yok" sayılmaz; karar çağırandadır).
-     */
+    /** Akış sonu doğrulaması (bkz. sınıf açıklaması). */
     fun finish() {
         if (events == 0) throw IOException(WIT_ERR_EMPTY)
+        if (transcriptionEvents == 0) throw IOException(WIT_ERR_SCHEMA)
+        if (pending != null && !pendingRepeat) throw IOException(WIT_ERR_TRUNCATED)
+        if (finalsIn == 0 && pending == null) throw IOException(WIT_ERR_NO_FINAL)
         if (pending != null) {
             if (!pendingRepeat) throw IOException(WIT_ERR_TRUNCATED)
             unconfirmedRepeat++

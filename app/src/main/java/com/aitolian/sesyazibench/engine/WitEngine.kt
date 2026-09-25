@@ -62,13 +62,13 @@ class WitEngine(
 
     /**
      * Parça teşhisi — yalnız sayılar ve kodlar; metin/anahtar yok.
-     * [codes]: her denemenin sonucu ("OK", "OK_SILENT" ya da hata kodu).
+     * [codes]: her denemenin sonucu ("OK", "SKIP_SILENT" ya da hata kodu).
      */
     class ChunkDiag(
         val index: Int, val fromMs: Long, val toMs: Long, val samples: Int, val bytes: Int,
         /** Parça ortalaması. */
         val rms: Double,
-        /** En yüksek 200 ms pencere; sessizlik kararı bununla verilir. */
+        /** En yüksek 200 ms pencere; sayısal sessizlik (gönderilmeden atlama) kararı bununla verilir. */
         val peakRms: Double,
     ) {
         val codes = mutableListOf<String>()
@@ -77,6 +77,7 @@ class WitEngine(
         var finalsKept = 0
         var dupDropped = 0
         var echoIgnored = 0
+        var unknownEvents = 0
         /** Son finalle aynı metinli ara metin kesinleşmeden akış bitti (yeni söyleyiş olabilir). */
         var unconfirmedRepeat = 0
         /** true: belirteç zamanı, false: yaklaşık (orantılı), null: final yok. */
@@ -92,10 +93,14 @@ class WitEngine(
     /** Başarısız kalan parçanın örnek aralığı (yerel tamamlama için) ve hata kodu. */
     data class FailedChunk(val from: Int, val to: Int, val code: String)
 
+    /** Başarılı ama bir bölümü doğrulanamayan parça (kesinleşmeyen tekrar); örnek aralığı. */
+    data class UncertainChunk(val from: Int, val to: Int)
+
     data class Outcome(
         val result: EngineResult,
         val failed: List<FailedChunk>,
         val diag: List<ChunkDiag> = emptyList(),
+        val uncertain: List<UncertainChunk> = emptyList(),
     ) {
         val authFailed: Boolean get() = failed.any { it.code == ERR_AUTH }
     }
@@ -111,10 +116,11 @@ class WitEngine(
         private const val MIN_START_GAP_MS = 300L
         private const val MAX_FRAME_CHARS = 1_048_576
         /**
-         * Boş gövde bu düzeyin altındaki parçada "konuşma yok" sayılır (≈ -50 dBFS).
-         * Üstündeyse boş gövde hata: yeniden denenir, sonra tamamlama/uyarı yoluna girer.
+         * Sayısal sessizlik eşiği (≈ -74 dBFS tepe pencere). Bunun altındaki parça hiç
+         * GÖNDERİLMEZ ("SKIP_SILENT"): karar sesin kendisine göre verilir, sunucunun boş
+         * yanıtına göre değil. Boş/tanınmayan yanıt her zaman hatadır.
          */
-        internal const val SILENCE_RMS = 0.003
+        internal const val DIGITAL_SILENCE = 0.0002
         const val ENGINE = "wit.ai"
 
         const val ERR_AUTH = WIT_ERR_AUTH
@@ -287,14 +293,17 @@ class WitEngine(
                 else -> null
             },
         )
-        Outcome(result, if (cancelled) emptyList() else failed, diags)
+        val uncertain = if (cancelled) emptyList() else diags
+            .filter { it.unconfirmedRepeat > 0 && outcomes[it.index] is ChunkOutcome.Success }
+            .map { UncertainChunk(parts[it.index].first, parts[it.index].second) }
+        Outcome(result, if (cancelled) emptyList() else failed, diags, uncertain)
     }
 
     /**
      * Bir parçayı, gerekirse yeniden deneyerek işler. 401/403 tekrar denenmez
      * (ve diğer parçalar da denemeyi bırakır); 429 önerilen süre kadar bekler;
-     * ağ/5xx/yarım ya da boş yanıt en fazla [MAX_TRIES] kez, artan beklemeyle denenir.
-     * Boş gövde, parça sessizse (RMS < [SILENCE_RMS]) yeniden denenmeden "konuşma yok" sayılır.
+     * ağ/5xx/yarım/boş/tanınmayan yanıt en fazla [MAX_TRIES] kez, artan beklemeyle denenir.
+     * Sayısal olarak sessiz parça ([DIGITAL_SILENCE]) hiç gönderilmez.
      */
     private suspend fun runChunk(
         samples: FloatArray, from: Int, to: Int, cancel: AtomicBoolean, authDead: AtomicBoolean, diag: ChunkDiag,
@@ -302,6 +311,10 @@ class WitEngine(
     ): ChunkOutcome {
         val offsetMs = from * 1000L / AUDIO_RATE
         val durMs = (to - from) * 1000L / AUDIO_RATE
+        if (diag.peakRms < DIGITAL_SILENCE) {
+            diag.codes += "SKIP_SILENT"
+            return ChunkOutcome.Success(emptyList())
+        }
         val body = pcm16(samples, from, to)
         var lastCode = ERR_NETWORK
         repeat(MAX_TRIES) { attempt ->
@@ -330,11 +343,6 @@ class WitEngine(
                 lastCode = if (cancel.get()) ERR_CANCELLED else classify(e)
                 onLive(emptyList(), null)
                 if (cancel.get()) return ChunkOutcome.Failure(ERR_CANCELLED)
-                if (lastCode == ERR_EMPTY && diag.peakRms < SILENCE_RMS) {
-                    // Gerçekten sessiz parça: boş yanıt "konuşma yok"; boşuna yeniden deneme
-                    diag.codes += "OK_SILENT"
-                    return ChunkOutcome.Success(emptyList())
-                }
                 diag.codes += lastCode
                 if (attempt < MAX_TRIES - 1) delay(700L * (attempt + 1))
             } catch (e: Exception) {
@@ -448,6 +456,7 @@ class WitEngine(
             diag.dupDropped = st.dupDropped
             diag.echoIgnored = st.echoIgnored
             diag.unconfirmedRepeat = st.unconfirmedRepeat
+            diag.unknownEvents = st.unknownEvents
             watchdog.cancel()
             runCatching { conn.disconnect() }
         }
@@ -455,5 +464,5 @@ class WitEngine(
 }
 
 private val KNOWN_CODES = setOf(
-    WIT_ERR_TRUNCATED, WIT_ERR_INVALID, WIT_ERR_SERVICE, WIT_ERR_TIMEOUT, WIT_ERR_EMPTY,
+    WIT_ERR_TRUNCATED, WIT_ERR_INVALID, WIT_ERR_SCHEMA, WIT_ERR_NO_FINAL, WIT_ERR_SERVICE, WIT_ERR_TIMEOUT, WIT_ERR_EMPTY,
 )

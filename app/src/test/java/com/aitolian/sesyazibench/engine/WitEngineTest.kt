@@ -41,7 +41,11 @@ class WitEngineTest {
 
     private val loud = 0.3f
 
-    private fun audio(silentSecondPart: Boolean = false, quietWordInSecondPart: Boolean = false): DecodedAudio {
+    private fun audio(
+        silentSecondPart: Boolean = false,
+        quietWordInSecondPart: Boolean = false,
+        lowLevelSecondPart: Boolean = false,
+    ): DecodedAudio {
         val n = 70 * AUDIO_RATE
         val gapFrom = 40 * AUDIO_RATE
         val gapTo = gapFrom + AUDIO_RATE / 4
@@ -50,6 +54,7 @@ class WitEngineTest {
                 i in gapFrom until gapTo -> 0f
                 quietWordInSecondPart && i >= gapTo -> if (i in 60 * AUDIO_RATE until 61 * AUDIO_RATE)
                     (0.02 * kotlin.math.sin(2 * Math.PI * 200 * i / AUDIO_RATE)).toFloat() else 0f
+                lowLevelSecondPart && i >= gapTo -> (0.002 * kotlin.math.sin(2 * Math.PI * 200 * i / AUDIO_RATE)).toFloat()
                 silentSecondPart && i >= gapTo -> 0f
                 else -> (loud * kotlin.math.sin(2 * Math.PI * 300 * i / AUDIO_RATE)).toFloat()
             }
@@ -89,12 +94,38 @@ class WitEngineTest {
         assertEquals(listOf(WIT_ERR_EMPTY, WIT_ERR_EMPTY, WIT_ERR_EMPTY), oc.diag[1].codes)
     }
 
-    @Test fun emptyBodyOnReallySilentChunkIsSilence() {
+    @Test fun digitallySilentChunkIsNotSentAtAll() {
         val tries = ConcurrentHashMap<Int, AtomicInteger>()
         val oc = run(engine({ Resp(200, okText) }, { Resp(200, "") }, tries), audio(silentSecondPart = true))
         assertTrue(oc.failed.isEmpty())
-        assertEquals(1, tries[1]!!.get())                 // sessizlikte boşuna tekrar yok
-        assertEquals(listOf("OK_SILENT"), oc.diag[1].codes)
+        assertNull(tries[1])                              // karar sesle verildi, istek yok
+        assertEquals(listOf("SKIP_SILENT"), oc.diag[1].codes)
+    }
+
+    @Test fun lowLevelSignalWithEmptyBodyIsFailureNotSilence() {
+        val tries = ConcurrentHashMap<Int, AtomicInteger>()
+        val oc = run(engine({ Resp(200, okText) }, { Resp(200, "") }, tries), audio(lowLevelSecondPart = true))
+        assertEquals(WitEngine.ERR_EMPTY, oc.failed.single().code)
+        assertEquals(3, tries[1]!!.get())
+    }
+
+    @Test fun unknownJsonChunkIsFailureNotSilentSuccess() {
+        val tries = ConcurrentHashMap<Int, AtomicInteger>()
+        val oc = run(engine({ Resp(200, okText) }, { Resp(200, "{}") }, tries), audio())
+        assertEquals(WIT_ERR_SCHEMA, oc.failed.single().code)
+        assertEquals(1, oc.result.segments.size)          // diğer parça korunur
+    }
+
+    @Test fun unconfirmedRepeatIsReportedAsUncertainChunk() {
+        val body = """{"text":"nakarat","is_final":true}
+{"text":"nakarat","is_final":false}"""
+        val tries = ConcurrentHashMap<Int, AtomicInteger>()
+        val oc = run(engine({ Resp(200, body) }, { Resp(200, okText) }, tries), audio())
+        assertTrue(oc.failed.isEmpty())
+        assertEquals(1, oc.uncertain.size)                // normal sonuca taşınır
+        assertEquals(0, oc.uncertain[0].from)
+        assertEquals(listOf("nakarat", "merhaba dünya"), oc.result.segments.map { it.text }) // partial eklenmez
+        assertEquals(1, tries[0]!!.get())                 // kör yeniden deneme yok
     }
 
     @Test fun emptyBodyOnChunkWithShortQuietSpeechIsNotSilence() {

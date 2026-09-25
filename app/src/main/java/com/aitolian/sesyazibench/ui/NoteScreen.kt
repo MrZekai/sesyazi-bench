@@ -101,6 +101,7 @@ import com.aitolian.sesyazibench.Tab
 import com.aitolian.sesyazibench.isCloud
 import com.aitolian.sesyazibench.ads.BannerAd
 import com.aitolian.sesyazibench.data.Exports
+import com.aitolian.sesyazibench.data.RangeWarning
 import com.aitolian.sesyazibench.data.Transcript
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.Sentences
@@ -230,6 +231,13 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                             else -> SyncedParagraphs(blocks, active, font, lineMul, tracker)
                         }
                         if (s.suggestBest && s.hasAudio && !working && s.refining == null) SuggestBest(onRun = vm::refineWithBest)
+                        if (r.warnings.isNotEmpty() && r.editedText == null) {
+                            WarningsCard(
+                                r.warnings,
+                                canRetry = s.hasAudio && !working && s.refining == null && vm.cloudAvailable,
+                                onRetry = vm::retryWarning,
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                         Text(
                             processLine(r) +
@@ -866,6 +874,37 @@ private fun TranslationBody(s: MainState, vm: MainViewModel, font: Int, lineMul:
             "Yukarıdaki çeviri cihazda yapılır; her dil paketi yalnızca ilk seferde indirilir.",
             fontSize = 12.sp, color = SY.Muted, modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
+    }
+}
+
+/**
+ * Doğrulanamayan bölümler: kesinleşmiş metin korunur; kullanıcı isterse yalnız o
+ * bölüm yeniden dökülür (kör otomatik tekrar yok). "Söz kayboldu" iddiası yapılmaz.
+ */
+@Composable
+private fun WarningsCard(warnings: List<RangeWarning>, canRetry: Boolean, onRetry: (RangeWarning) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(14.dp))
+            .border(1.dp, SY.Error.copy(alpha = .45f), RoundedCornerShape(14.dp)).background(SY.Card).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            if (warnings.size == 1) "⚠ Bir bölüm tam doğrulanamadı" else "⚠ ${warnings.size} bölüm tam doğrulanamadı",
+            fontSize = 14.sp, color = SY.Text, fontWeight = FontWeight.Medium,
+        )
+        Text(
+            "Bu aralıkta bir satır yeniden başlamış görünüyor ama kesinleşmedi; metin eksik olabilir.",
+            fontSize = 12.5.sp, color = SY.Muted, lineHeight = 17.sp,
+        )
+        warnings.forEach { w ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${Transcript.clock(w.fromMs)}–${Transcript.clock(w.toMs)}",
+                    fontSize = 13.sp, color = SY.Text, modifier = Modifier.weight(1f),
+                )
+                if (canRetry) Pill("Bu bölümü yeniden dök", bg = SY.Accent, fg = SY.OnAccent, onClick = { onRetry(w) })
+            }
+        }
     }
 }
 

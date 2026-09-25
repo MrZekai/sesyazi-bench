@@ -8,7 +8,10 @@ import java.nio.ByteBuffer
  * içerik mono toplamda sönümlenir; bu oran bunu görünür kılar).
  * Android bağımlılığı yok (birim testlerde kullanılır).
  */
-internal class Downmix {
+internal class Downmix(
+    /** ≥ 0: yalnız bu kanal kullanılır (zıt fazlı stereo'da sönümlenmeyi önlemek için); -1: ortalama. */
+    private val pick: Int = -1,
+) {
     private var monoEnergy = 0.0
     private var channelEnergy = 0.0
     private var maxChannels = 1
@@ -28,12 +31,14 @@ internal class Downmix {
     private inline fun mix(ch: Int, next: () -> Float): Float {
         var sum = 0f
         var e = 0.0
-        repeat(ch) {
+        var picked = 0f
+        repeat(ch) { k ->
             val v = next()
+            if (k == pick) picked = v
             sum += v
             e += v.toDouble() * v
         }
-        val m = sum / ch
+        val m = if (pick in 0 until ch) picked else sum / ch
         monoEnergy += m.toDouble() * m
         channelEnergy += e / ch
         return m
