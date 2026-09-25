@@ -125,18 +125,23 @@ object Ads {
     }
 
     /**
-     * Döküm başında çağrılır. Reklam henüz yüklenmemişse en fazla [timeoutMs]
-     * bekler. Gösterim ancak [stillWanted] hâlâ doğruysa (metin ekrana gelmemiş,
-     * iş iptal edilmemiş) ve ekran ön plandaysa yapılır: sonuç okunurken üstüne
-     * sonradan reklam bindirilmez. Döküm reklamın arkasında sürer.
+     * Döküm başında çağrılır (paylaş → reklam → metin). SDK başlatması ve reklam
+     * yüklemesi soğuk açılışta birkaç saniye sürebilir; toplam en fazla [timeoutMs]
+     * beklenir. [stillWanted]: aynı döküm oturumu sürüyor/yeni bitti ve kullanıcı
+     * iptal etmedi. Metin ekrana gelmiş olsa da oturum aynıysa reklam gösterilir
+     * (kullanıcı kararı: geçiş reklamı her dökümde çıkar); süre dolarsa atlanır.
      */
-    suspend fun showWhenReady(activity: ComponentActivity, stillWanted: () -> Boolean, timeoutMs: Long = 3_000) {
+    suspend fun showWhenReady(activity: ComponentActivity, stillWanted: () -> Boolean, timeoutMs: Long = 5_000) {
+        var waited = 0L
+        while (!_ready.value && waited < timeoutMs) {
+            if (!stillWanted()) return
+            kotlinx.coroutines.delay(150); waited += 150
+        }
         if (!_ready.value) return
         if (interstitial == null) main.post { loadInterstitial() }
-        var waited = 0L
         while (interstitial == null && waited < timeoutMs) {
             if (!stillWanted()) return
-            kotlinx.coroutines.delay(200); waited += 200
+            kotlinx.coroutines.delay(150); waited += 150
         }
         if (!stillWanted()) return
         if (!activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return

@@ -96,7 +96,6 @@ import androidx.compose.ui.unit.sp
 import com.aitolian.sesyazibench.MainState
 import com.aitolian.sesyazibench.MainViewModel
 import com.aitolian.sesyazibench.Phase
-import com.aitolian.sesyazibench.Quality
 import com.aitolian.sesyazibench.Tab
 import com.aitolian.sesyazibench.isCloud
 import com.aitolian.sesyazibench.ads.BannerAd
@@ -143,7 +142,7 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
     var confirmDiscard by remember { mutableStateOf<(() -> Unit)?>(null) }
     val font = s.readerFont
     val lineMul = LINE_MUL[s.readerLine.coerceIn(0, 2)]
-    val working = s.phase is Phase.Transcribing || s.phase is Phase.Preparing || s.phase is Phase.Downloading
+    val working = s.phase is Phase.Transcribing || s.phase is Phase.Preparing
 
     /** Kaydedilmemiş düzenleme varsa önce sor. */
     fun leaveEditThen(action: () -> Unit) {
@@ -185,11 +184,10 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
             onDelete = { leaveEditThen(vm::deleteCurrent) },
         )
 
-        // Durum şeritleri: hazırlık / model indirme / canlı döküm / arka plan iyileştirme
+        // Durum şeritleri: hazırlık / canlı döküm / bölüm yeniden dökümü
         when (val phase = s.phase) {
             is Phase.Preparing -> StatusStrip(phase.message, null, onCancel = vm::cancelWork)
-            is Phase.Downloading -> StatusStrip("Model indiriliyor · ${phase.mb} MB", phase.progress, onCancel = vm::cancelWork)
-            is Phase.Transcribing -> LiveBar(phase.percent, s.etaSec, onCancel = vm::cancelWork)
+            is Phase.Transcribing -> LiveBar(phase.percent, onCancel = vm::cancelWork)
             else -> Unit
         }
         s.refining?.let { RefineStrip(it) }
@@ -230,7 +228,6 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                             r.editedText != null -> PaperText(listOf(r.editedText), font, lineMul)
                             else -> SyncedParagraphs(blocks, active, font, lineMul, tracker)
                         }
-                        if (s.suggestBest && s.hasAudio && !working && s.refining == null) SuggestBest(onRun = vm::refineWithBest)
                         // Düzenleme doğrulama sayılmaz: uyarı her zaman görünür; yalnız yeniden dökme düzenlenmemiş notta
                         if (r.warnings.isNotEmpty()) {
                             WarningsCard(
@@ -338,40 +335,17 @@ private fun NoteTopBar(
             IconTap(Icons.Filled.MoreVert, "Diğer seçenekler") { menu = true }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (s.hasAudio && !working) {
-                    // En iyi: mevcut metin kalır, büyük model doğrudan bir kez çalışır (ön izleme tekrarlanmaz)
-                    if (r.quality != Quality.BEST.name && s.refining == null) {
+                    if (!r.isCloud()) {
                         DropdownMenuItem(
-                            text = { Text("En iyi kalite ile iyileştir") },
-                            onClick = { menu = false; vm.refineWithBest() },
+                            text = { Text("⚡ Yeniden dök") },
+                            onClick = { menu = false; vm.retranscribe(langOf(r.language)?.takeIf { it in vm.speechLangs } ?: s.lang) },
                         )
                     }
-                    if (vm.cloudAvailable && !r.isCloud()) {
-                        DropdownMenuItem(
-                            text = { Text("⚡ Hızlı (internet) ile yeniden dök") },
-                            onClick = { menu = false; vm.setEngineMode(1); vm.retranscribe() },
-                        )
-                    }
-                    Quality.entries.filter { it != Quality.BEST && it.name != r.quality }.forEach { q ->
-                        DropdownMenuItem(
-                            text = { Text("${q.label} kalite ile telefonda yeniden dök") },
-                            onClick = { menu = false; vm.retranscribeLocal(q) },
-                        )
-                    }
-                    (listOf(Lang.AUTO) + TRANSLATABLE).filter { it.code != r.language && it != s.lang }.forEach { l ->
+                    vm.speechLangs.filter { it.code != r.language }.forEach { l ->
                         DropdownMenuItem(
                             text = { Text("Dil: ${l.label} ile yeniden dök") },
                             onClick = { menu = false; vm.retranscribeInLanguage(l) },
                         )
-                    }
-                    if (vm.prefs.devMode && s.refining == null) {
-                        listOf(false, true).forEach { q8 ->
-                            listOf(true, false).forEach { fallback ->
-                                DropdownMenuItem(
-                                    text = { Text("Test: Turbo ${if (q8) "q8" else "q5"} · tekrar deneme ${if (fallback) "açık" else "kapalı"}") },
-                                    onClick = { menu = false; vm.rerunBestExperiment(q8, fallback) },
-                                )
-                            }
-                        }
                     }
                 }
                 DropdownMenuItem(text = { Text("Bu notu sil", color = SY.Error) }, onClick = { menu = false; onDelete() })
@@ -475,12 +449,12 @@ private fun StatusStrip(text: String, progress: Float?, onCancel: () -> Unit) {
 }
 
 @Composable
-private fun LiveBar(percent: Int, eta: Int?, onCancel: () -> Unit) {
+private fun LiveBar(percent: Int, onCancel: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(SY.A2))
             Text(
-                if (percent < 0) "Canlı · ⚡ Hızlı mod" else "Canlı · %$percent" + (eta?.let { " · ~$it sn" } ?: ""),
+                if (percent < 0) "Canlı · ⚡ yazıya dökülüyor" else "Canlı · %$percent",
                 color = SY.Muted, fontSize = 12.5.sp, modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             CancelText(onCancel)
@@ -909,21 +883,6 @@ private fun WarningsCard(warnings: List<RangeWarning>, canRetry: Boolean, onRetr
     }
 }
 
-@Composable
-private fun SuggestBest(onRun: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(14.dp))
-            .border(1.dp, SY.Accent.copy(alpha = .35f), RoundedCornerShape(14.dp)).background(SY.Card).padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text("Hatalı kelimeler mi var?", fontSize = 14.sp, color = SY.Text, fontWeight = FontWeight.Medium)
-            Text("\"En iyi\" kalite Türkçede daha doğru ama yavaş. Bu metin ekranda kalır, bitince güncellenir.", fontSize = 12.5.sp, color = SY.Muted)
-        }
-        Pill("En iyi ile dene", bg = SY.Accent, fg = SY.OnAccent, modifier = Modifier.padding(start = 8.dp), onClick = onRun)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Alt işlemler
 // ---------------------------------------------------------------------------
@@ -1010,23 +969,15 @@ private fun BarButton(label: String, modifier: Modifier, filled: Boolean, onClic
 // Yardımcılar
 // ---------------------------------------------------------------------------
 
-/**
- * Süre satırı. En iyi ile iyileştirilmiş notta ön izleme ve En iyi turları ayrı
- * yazılır (toplam tek sayı olarak gösterilmez; eski kayıtlarda tek sayı).
- */
+/** Süre satırı: dökümün kaç saniyede bittiği (hız, uygulamanın ana vaadi). */
 private fun processLine(r: Transcript): String {
     val tr = Locale("tr")
     fun sec(ms: Long) = "%.1f".format(tr, ms / 1000.0)
-    val q = r.quality?.let { n -> Quality.entries.firstOrNull { it.name == n } }
+    val marked = r.segments.any { it.text.startsWith("[⚠") }
     return when {
-        r.quality == com.aitolian.sesyazibench.QUALITY_WIT_MIX && r.previewMs == 0L ->
-            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn · " +
-                (if (r.segments.any { it.text.startsWith("[⚠") }) "bazı bölümler yazıya dökülemedi" else "bazı bölümler telefonda tamamlandı")
-        r.quality == com.aitolian.sesyazibench.QUALITY_WIT && r.previewMs == 0L ->
-            "✓ ⚡ Hızlı mod · ${sec(r.processMs)} sn'de yazıya döküldü"
-        r.previewMs > 0 -> "✓ Ön izleme ${sec(r.previewMs)} sn · En iyi ${sec(r.processMs)} sn · cihazda yazıya döküldü"
-        q != null -> "✓ ${q.label} · ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
-        else -> "✓ ${sec(r.processMs)} sn'de cihazda yazıya döküldü"
+        r.processMs <= 0L -> "✓ Yazıya döküldü"
+        marked -> "✓ ⚡ ${sec(r.processMs)} sn · bazı bölümler yazıya dökülemedi"
+        else -> "✓ ⚡ ${sec(r.processMs)} sn'de yazıya döküldü"
     }
 }
 

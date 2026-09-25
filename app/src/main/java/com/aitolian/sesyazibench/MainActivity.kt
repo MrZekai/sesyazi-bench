@@ -17,7 +17,6 @@ import kotlinx.coroutines.launch
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ui.MainScreen
 import com.aitolian.sesyazibench.ui.SesYaziTheme
-import com.aitolian.sesyazibench.ui.CloudConsentDialog
 import com.aitolian.sesyazibench.ui.isDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -62,8 +61,6 @@ class MainActivity : ComponentActivity() {
                         lifecycleScope.launch { Ads.showWhenReady(this@MainActivity, stillWanted = vm::adStillWanted) }
                     },
                 )
-                // İlk bulut aktarımından önce seçim (hangi ekran açık olursa olsun)
-                CloudConsentDialog(vm)
             }
         }
     }
@@ -76,9 +73,7 @@ class MainActivity : ComponentActivity() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         // Arka planda büyük modeli tutmak sistemin uygulamayı öldürmesine yol açar
-        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
-            com.aitolian.sesyazibench.engine.WhisperEngine.releaseIfIdle()
-        }
+        // Yerel model yok: bırakılacak büyük bellek yok
     }
 
     override fun onStop() {

@@ -71,14 +71,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aitolian.sesyazibench.MainState
 import com.aitolian.sesyazibench.MainViewModel
 import com.aitolian.sesyazibench.Phase
-import com.aitolian.sesyazibench.Quality
 import com.aitolian.sesyazibench.R
 import com.aitolian.sesyazibench.ShareIntegration
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ads.BannerAd
 import com.aitolian.sesyazibench.ads.NativeAdCard
-import com.aitolian.sesyazibench.engine.Lang
-import com.aitolian.sesyazibench.engine.TRANSLATABLE
 
 private val AUDIO_TYPES = arrayOf("audio/*", "video/*", "application/ogg")
 
@@ -113,7 +110,7 @@ fun MainScreen(
     LaunchedEffect(s.toast) {
         s.toast?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); vm.toastShown() }
     }
-    val busy = s.phase is Phase.Preparing || s.phase is Phase.Downloading || s.phase is Phase.Transcribing
+    val busy = s.phase is Phase.Preparing || s.phase is Phase.Transcribing
     val pickFile = { if (!busy) picker.launch(AUDIO_TYPES) }
     val openWhatsApp = {
         if (!ShareIntegration.openWhatsApp(context)) {
@@ -251,7 +248,6 @@ private fun StatusCard(s: MainState, busy: Boolean, onCancel: () -> Unit, onRetr
                 is Phase.Transcribing -> if (p.percent < 0) CircularProgressIndicator(
                     Modifier.size(56.dp), color = SY.Accent, strokeWidth = 5.dp, trackColor = SY.Card,
                 ) else ProgressRing(p.percent / 100f, "%${p.percent}")
-                is Phase.Downloading -> ProgressRing(p.progress, "%${(p.progress * 100).toInt()}")
                 is Phase.Preparing -> CircularProgressIndicator(
                     Modifier.size(56.dp), color = SY.Accent, strokeWidth = 5.dp, trackColor = SY.Card,
                 )
@@ -259,11 +255,8 @@ private fun StatusCard(s: MainState, busy: Boolean, onCancel: () -> Unit, onRetr
             }
         }
         val (title, sub) = when (val p = s.phase) {
-            is Phase.Preparing -> p.message to (if (s.engineMode == 1) "Hızlı mod · internet" else "Ses telefonundan çıkmaz")
-            is Phase.Downloading -> "Model indiriliyor…" to "Tek seferlik · ${p.mb} MB"
-            is Phase.Transcribing -> "Yazıya dökülüyor…" to
-                if (p.percent < 0) "⚡ Hızlı mod · birkaç saniye"
-                else (s.etaSec?.let { "Tahmini ~$it sn · " } ?: "") + "internet gerekmez, ses telefondan çıkmaz"
+            is Phase.Preparing -> p.message to "⚡ Birazdan yazıya dökülüyor"
+            is Phase.Transcribing -> "Yazıya dökülüyor…" to "⚡ Saniyeler içinde · ${s.lang.label}"
             is Phase.Failed -> "Bir sorun oldu" to p.message
             Phase.Idle -> "" to ""
         }
@@ -271,7 +264,7 @@ private fun StatusCard(s: MainState, busy: Boolean, onCancel: () -> Unit, onRetr
             Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = SY.Text)
             Text(sub, fontSize = 13.sp, color = if (failed) SY.Error else SY.Muted, lineHeight = 18.sp)
             Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (s.phase is Phase.Transcribing || s.phase is Phase.Downloading || s.phase is Phase.Preparing) {
+                if (s.phase is Phase.Transcribing || s.phase is Phase.Preparing) {
                     Pill("İptal", bg = SY.Chip, fg = SY.Text, onClick = onCancel)
                 }
                 if (failed && !busy) Pill("Tekrar dene", bg = SY.Accent, fg = SY.OnAccent, onClick = onRetry)
@@ -311,26 +304,13 @@ private fun Controls(s: MainState, busy: Boolean, vm: MainViewModel) {
                 onClick = { if (!busy) langOpen = true },
             )
             DropdownMenu(expanded = langOpen, onDismissRequest = { langOpen = false }) {
-                (listOf(Lang.AUTO) + TRANSLATABLE).forEach { l ->
+                vm.speechLangs.forEach { l ->
                     DropdownMenuItem(text = { Text(l.label) }, onClick = {
                         langOpen = false
                         if (l != s.lang) vm.retranscribeInLanguage(l)
                     })
                 }
             }
-        }
-        if (s.engineMode != 1) Quality.entries.forEach { q ->
-            val sel = s.quality == q
-            Pill(
-                q.label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
-                onClick = {
-                    if (!busy && !sel) {
-                        vm.setQuality(q)
-                        if (q == Quality.BEST) vm.toast("En iyi: ${q.model.approxMb} MB model, orta seviye telefonlarda yavaş")
-                        vm.retranscribe(forceLocal = true)
-                    }
-                },
-            )
         }
     }
 }

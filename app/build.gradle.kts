@@ -9,7 +9,6 @@ plugins {
 android {
     namespace = "com.aitolian.sesyazibench"
     compileSdk = 36
-    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         // Mağaza kimliği: Play'de yayınlandıktan sonra DEĞİŞTİRİLEMEZ. Kod paketi (namespace) ayrı; kullanıcı görmez.
@@ -20,21 +19,9 @@ android {
         versionName = "0.1.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
 
         // Hızlı mod (Wit.ai) dil → anahtar eşlemesi: GitHub secret WIT_TOKENS (JSON).
-        // Yoksa boş; uygulama yalnızca telefonda (Whisper) çalışır.
+        // Uygulama YALNIZ Wit ile çalışır (cihaz içi model yok); CI boş anahtarı reddeder.
         val witTokens = (System.getenv("WIT_TOKENS") ?: project.findProperty("witTokens") as String? ?: "{}").replace("\r", " ").replace("\n", " ").trim()
         buildConfigField("String", "WIT_TOKENS", "\"" + witTokens.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
-
-        ndk {
-            // Benchmark için yalnızca gerçek telefon mimarisi
-            abiFilters += listOf("arm64-v8a")
-        }
-        externalNativeBuild {
-            cmake {
-                // 16 KB sayfa boyutu (NDK r27): tüm .so'lar (whisper/ggml varyantları dahil) 16 KB hizalı bağlanır.
-                // CI, üretilen APK'daki her .so'nun LOAD hizalamasını ayrıca denetler.
-                arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_static", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
-            }
-        }
     }
 
     // Yükleme (upload) anahtarı: CI'da GitHub secret'lardan gelir; yoksa debug anahtarı
@@ -78,12 +65,6 @@ android {
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -95,8 +76,6 @@ android {
     }
     // Birim testleri: Android çağrıları (SystemClock vb.) varsayılan değer döndürür
     testOptions { unitTests.isReturnDefaultValues = true }
-    // ggml CPU varyantları dlopen ile yüklenir → .so dosyaları diske çıkarılmalı
-    packaging { jniLibs { useLegacyPackaging = true } }
 }
 
 kotlin {
@@ -129,6 +108,4 @@ dependencies {
     implementation("com.google.android.gms:play-services-ads:24.4.0")
     implementation("com.google.android.ump:user-messaging-platform:3.2.0")
 
-    // ML Kit GenAI Speech Recognition (alpha) — cihaz içi
-    implementation("com.google.mlkit:genai-speech-recognition:1.0.0-alpha1")
 }

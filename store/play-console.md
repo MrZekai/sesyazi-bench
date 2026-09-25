@@ -21,7 +21,7 @@ Genel: veriler aktarımda şifreleniyor → **Evet**. Hesap yok.
 
 | Veri türü | Toplanıyor | Paylaşılıyor | Zorunlu mu | Amaç | Not |
 |---|---|---|---|---|---|
-| Ses → Sesli veya ses kayıtları | Evet | Evet (Meta Wit.ai, modeli geliştirmek için de kullanabiliyor) | İsteğe bağlı (Telefonda modu var) | Uygulama işlevselliği | Meta'da ≤ 90 gün |
+| Ses → Sesli veya ses kayıtları | Evet | Evet (Meta Wit.ai, modeli geliştirmek için de kullanabiliyor) | Zorunlu (yazıya dökme yalnız Wit.ai ile) | Uygulama işlevselliği | Meta'da ≤ 90 gün |
 | Cihaz veya diğer kimlikler | Evet (AdMob) | Evet (AdMob) | Zorunlu | Reklam, analiz, dolandırıcılık önleme | Google'ın AdMob veri açıklaması rehberine göre doldur |
 | Konum → Yaklaşık konum | Evet (AdMob, IP) | Evet | Zorunlu | Reklam | AdMob rehberi |
 | Uygulama etkinliği → Uygulama etkileşimleri | Evet (AdMob) | Evet | Zorunlu | Reklam, analiz | AdMob rehberi |
@@ -49,12 +49,12 @@ Her yeni yüklemede `versionCode` = CI çalıştırma numarası (otomatik artar)
 2. "Paylaş → MuteRead → Oku." — gerçek paylaşım akışı (WhatsApp logosu YOK).
 3. "Kopyala, düzelt, sakla." — not düzenleme ve arama.
 4. "Metni kendi dilinde oku." — çeviri (kaliteyi abartmadan).
-5. "İstersen telefonda işle." — model indirme gereksinimi küçük ama okunur.
+5. "Saniyeler içinde." — gerçek bir dökümün süre satırı (ör. "⚡ 2,8 sn"), ölçülmüş değer.
 
 Kullanma: "%100 doğru", "en iyi", sahte yıldız/yorum, ölçülmemiş süre.
 
 ## 5. Kapalı test ölçüm satırı
 
-`cihaz / RAM / Android / dil / kaynak türü / ses süresi / ilk metin sn / toplam sn / yerel geçiş / eksik kelime / çökme-ANR / reklam gösterildi mi`
+`cihaz / RAM / Android / dil / kaynak türü / ses süresi / ilk metin sn / toplam sn / Wit hata kodu / eksik kelime / çökme-ANR / reklam gösterildi mi`
 
 Durdurma ölçütü: çökme/ANR, yanlış nota metin yazılması, izin verilmeden yükleme, sessiz metin kaybı.

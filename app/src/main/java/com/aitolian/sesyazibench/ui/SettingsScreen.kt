@@ -63,33 +63,23 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.aitolian.sesyazibench.MainState
 import com.aitolian.sesyazibench.MainViewModel
-import com.aitolian.sesyazibench.Quality
 import com.aitolian.sesyazibench.ResultLog
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.engine.Lang
 import com.aitolian.sesyazibench.engine.OnDeviceTranslator
 import com.aitolian.sesyazibench.engine.TRANSLATABLE
-import com.aitolian.sesyazibench.engine.WhisperModel
 import kotlinx.coroutines.launch
 
 // Yayın öncesi bu uygulamaya özel adreslerle güncellenmeli
 // Yalnız MuteRead'e ait politika (store/muteread-privacy.html; GitHub Pages'te yayınlanır)
-private const val PRIVACY_URL = PRIVACY_POLICY_URL
+private const val PRIVACY_URL = "https://mrzekai.github.io/muteread-privacy.html"
 private const val SUPPORT_EMAIL = "aitolianrock@gmail.com"
 
 private const val LICENSES =
-    "• whisper.cpp / ggml — MIT Lisansı, © Georgi Gerganov ve katkıda bulunanlar\n" +
-    "• OpenAI Whisper model ağırlıkları — MIT Lisansı, © OpenAI\n" +
-    "• Silero VAD — MIT Lisansı, © Silero Team\n" +
-    "• Google ML Kit (Çeviri, Konuşma) — Google APIs Hizmet Şartları\n" +
+    "• Wit.ai (Meta) — konuşmayı yazıya dökme hizmeti, Wit.ai Hizmet Koşulları\n" +
+    "• Google ML Kit Çeviri — Google APIs Hizmet Şartları\n" +
     "• Google Mobile Ads SDK, User Messaging Platform — Google Hizmet Şartları\n" +
     "• AndroidX, Jetpack Compose, Kotlin — Apache Lisansı 2.0"
-
-private fun Quality.description() = when (this) {
-    Quality.FAST -> "En hızlı. Kısa ve net mesajlar için; doğruluk daha düşük. Dil algılamada da kullanılır."
-    Quality.BALANCED -> "Çoğu mesaj için önerilen. Orta seviye telefonlarda biraz bekletebilir."
-    Quality.BEST -> "En doğru. Önce Dengeli/Hızlı ön izleme gelir, arka planda büyük modelle iyileştirilir."
-}
 
 @Composable
 fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
@@ -128,49 +118,8 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
 
             // --- Transkript ---
             Group("Transkript") {
-                if (vm.cloudAvailable) {
-                    Text("Yazıya dökme yöntemi", color = SY.Text, fontSize = 14.5.sp)
-                    listOf(
-                        1 to ("⚡ Hızlı (internet)" to "Birkaç saniye. Ses, yazıya dökülmek için Meta Wit.ai'ye gönderilir. İnternet yoksa telefonda çalışır."),
-                        2 to ("🔒 Telefonda" to "Ses telefonundan hiç çıkmaz, internetsiz. Uzun seslerde yavaş."),
-                    ).forEach { (m, texts) ->
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { vm.setEngineMode(m, grantConsent = true) },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(
-                                selected = s.engineMode == m, onClick = { vm.setEngineMode(m, grantConsent = true) },
-                                colors = RadioButtonDefaults.colors(selectedColor = SY.Accent, unselectedColor = SY.Muted),
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(texts.first, color = SY.Text, fontSize = 14.sp)
-                                Text(texts.second, color = SY.Muted, fontSize = 12.sp)
-                            }
-                        }
-                    }
-                    Divider()
-                }
-                LangRow("Varsayılan konuşma dili", s.lang, listOf(Lang.AUTO) + TRANSLATABLE, vm::setDefaultLang)
-                Divider()
-                Text(
-                    if (vm.cloudAvailable) "Telefonda dökme kalitesi" else "Varsayılan kalite",
-                    color = SY.Text, fontSize = 14.5.sp, modifier = Modifier.padding(top = 4.dp),
-                )
-                Quality.entries.forEach { q ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { vm.setDefaultQuality(q) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(
-                            selected = s.quality == q, onClick = { vm.setDefaultQuality(q) },
-                            colors = RadioButtonDefaults.colors(selectedColor = SY.Accent, unselectedColor = SY.Muted),
-                        )
-                        Column(Modifier.weight(1f)) {
-                            Text(q.label, color = SY.Text, fontSize = 14.sp)
-                            Text(q.description(), color = SY.Muted, fontSize = 12.sp)
-                        }
-                    }
-                }
+                LangRow("Varsayılan konuşma dili", s.lang, vm.speechLangs, vm::setDefaultLang)
+                Hint("⚡ Sesler saniyeler içinde yazıya dökülür (internet gerekir). WhatsApp'tan paylaştığın ses bu dilde dökülür; farklıysa not menüsünden dili değiştir.")
             }
 
             // --- Çeviri ---
@@ -191,25 +140,6 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                     }
                 }
                 Hint("Çeviri telefonunda yapılır; metnin hiçbir sunucuya gönderilmez.")
-            }
-
-            // --- Depolama (modeller) ---
-            Group("Depolama") {
-                Quality.entries.forEach { q ->
-                    val m = q.model
-                    val progress = s.modelDownloads[m]
-                    val ready = remember(refresh, progress) { vm.modelReady(m) }
-                    ItemRow("${q.label} modeli", "${m.approxMb} MB · ${if (ready) "indirildi" else "indirilmedi"}") {
-                        when {
-                            progress != null -> LinearProgressIndicator(
-                                progress = { progress }, modifier = Modifier.width(70.dp), color = SY.Accent, trackColor = SY.Chip,
-                            )
-                            ready -> TextAction("Sil", SY.Error) { vm.deleteModel(m); refresh++ }
-                            else -> TextAction("İndir", SY.Accent) { vm.downloadModel(m) }
-                        }
-                    }
-                }
-                Hint("Modeller Wi‑Fi'da indirmen önerilir. Silinen model gerektiğinde tekrar indirilir.")
             }
 
             // --- Bildirimler ---
@@ -237,14 +167,11 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
             // --- Gizlilik ---
             Group("Gizlilik") {
                 Text(
-                    (if (s.engineMode == 1) "Hızlı modda ses, yazıya dökülmek için Meta Wit.ai'ye gönderilir. Meta bu " +
-                        "verileri kendi koşulları kapsamında işler; Wit.ai politikasına göre ses verileri en fazla 90 gün " +
-                        "saklanır ve konuşma tanımayı geliştirmek için analiz edilebilir. " +
-                        "Bizim bir sunucumuz yok; notların ve sesin geçici kopyası yalnızca telefonunda tutulur. " +
-                        "\"Telefonda\" seçersen ses telefonundan çıkmaz. "
-                    else "Sesin telefonundan çıkmaz; yazıya dökme cihazda yapılır. Notların telefonunda tutulur. ") +
-                        "Çeviri cihazda yapılır. Reklamlar Google AdMob tarafından gösterilir. " +
-                        "Yalnızca yazıya dökme hakkın olan sesleri paylaş.",
+                    "Ses, yazıya dökülmek için Meta'nın Wit.ai hizmetine gönderilir. Meta bu verileri kendi " +
+                        "koşulları kapsamında işler; Wit.ai politikasına göre ses verileri en fazla 90 gün saklanır ve " +
+                        "konuşma tanımayı geliştirmek için analiz edilebilir. Bizim bir sunucumuz yok; notların ve sesin " +
+                        "geçici kopyası yalnızca telefonunda tutulur. Çeviri cihazda yapılır. Reklamlar Google AdMob " +
+                        "tarafından gösterilir. Yalnızca yazıya dökme hakkın olan sesleri paylaş.",
                     color = SY.Muted, fontSize = 12.5.sp,
                 )
                 LinkRow("Gizlilik politikası") { openUrl(context, PRIVACY_URL) }
@@ -267,10 +194,10 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                 }
                 LinkRow("Açık kaynak lisansları") { showLicenses = true }
                 // Wit.ai Hizmet Koşulları 3.6: "Powered by Wit" + web sitesine bağlantı
-                if (vm.cloudAvailable) LinkRow("Powered by Wit · wit.ai") { openUrl(context, "https://wit.ai") }
+                LinkRow("Powered by Wit · wit.ai") { openUrl(context, "https://wit.ai") }
                 Text(
                     "Bu uygulama WhatsApp veya Meta tarafından geliştirilmemiş, desteklenmemiş veya onaylanmamıştır. " +
-                        "WhatsApp, WhatsApp LLC'nin ticari markasıdır. Hızlı mod, Meta'nın Wit.ai hizmetini kullanır.",
+                        "WhatsApp, WhatsApp LLC'nin ticari markasıdır. Yazıya dökme Meta'nın Wit.ai hizmetini kullanır.",
                     color = SY.Muted, fontSize = 11.5.sp,
                 )
                 LinkRow("Uygulamayı puanla") {
@@ -307,27 +234,7 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
 @Composable
 private fun DevTools(vm: MainViewModel, s: MainState, onClose: () -> Unit) {
     val context = LocalContext.current
-    var pendingAdvanced by remember { mutableStateOf(false) }
-    // ML Kit BASIC, dosyadan okusa bile Android tanıyıcısı mikrofon izni istiyor
-    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) vm.runMlKitTest(pendingAdvanced) else vm.toast("ML Kit testi için mikrofon izni gerekli")
-    }
-    fun runMlKit(advanced: Boolean) {
-        pendingAdvanced = advanced
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            vm.runMlKitTest(advanced)
-        } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-    }
-    val info = remember { vm.deviceInfo() }
-    var threads by remember { mutableIntStateOf(vm.prefs.threadOverride) }
-    var fallbackMode by remember { mutableIntStateOf(vm.prefs.fallbackMode) }
-    var bestPreview by remember { mutableStateOf(vm.prefs.bestPreview) }
-    var turboQ8 by remember { mutableStateOf(vm.prefs.turboQ8) }
-    var q8Refresh by remember { mutableIntStateOf(0) }
-    val q8Progress = s.modelDownloads[WhisperModel.TURBO_Q8]
-    val q8Ready = remember(q8Refresh, q8Progress) { vm.modelReady(WhisperModel.TURBO_Q8) }
     Group("Geliştirici") {
-        Text(info, fontSize = 11.5.sp, color = SY.Muted)
         // Son dökümün aşama süreleri — hızın nerede kaybolduğunu gösterir
         Text("Son döküm süreleri", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         Text(s.lastTiming ?: "Henüz ölçüm yok. Bir ses dök.", fontSize = 12.sp, color = SY.Text)
@@ -340,60 +247,6 @@ private fun DevTools(vm: MainViewModel, s: MainState, onClose: () -> Unit) {
         s.lastDiag?.let { d ->
             Pill("Teşhisi paylaş", bg = SY.Chip, fg = SY.Text, onClick = { shareText(context, d) })
         }
-        Text("Thread sayısı (A/B ölçümü)", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(0, 2, 3, 4, 6).forEach { n ->
-                val sel = threads == n
-                Pill(
-                    if (n == 0) "Oto" else "$n", bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
-                    onClick = { threads = n; vm.setThreadOverride(n) },
-                )
-            }
-        }
-
-        // --- Hız/doğruluk deneyleri: her ölçüm satırına hangi ayarla çalışıldığı yazılır ---
-        Text("Tekrar deneme (fallback)", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-        Text("Oto: Hızlı'da kapalı, Dengeli ve En iyi'de açık.", fontSize = 12.sp, color = SY.Muted)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(0 to "Oto", 1 to "Hep açık", 2 to "Hep kapalı").forEach { (m, label) ->
-                val sel = fallbackMode == m
-                Pill(label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
-                    onClick = { fallbackMode = m; vm.setFallbackMode(m) })
-            }
-        }
-        Text("En iyi modu", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(true to "Ön izlemeli", false to "Doğrudan büyük model").forEach { (on, label) ->
-                val sel = bestPreview == on
-                Pill(label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
-                    onClick = { bestPreview = on; vm.setBestPreview(on) })
-            }
-        }
-        Text("En iyi modeli", color = SY.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(false to "q5_0 (547 MB)", true to "q8_0 (834 MB)").forEach { (on, label) ->
-                val sel = turboQ8 == on
-                Pill(label, bg = if (sel) SY.Accent else SY.Chip, fg = if (sel) SY.OnAccent else SY.Text,
-                    onClick = { turboQ8 = on; vm.setTurboQ8(on) })
-            }
-        }
-        ItemRow("large-v3-turbo q8_0", "${WhisperModel.TURBO_Q8.approxMb} MB · ${if (q8Ready) "indirildi" else "indirilmedi"}") {
-            when {
-                q8Progress != null -> LinearProgressIndicator(
-                    progress = { q8Progress }, modifier = Modifier.width(70.dp), color = SY.Accent, trackColor = SY.Chip,
-                )
-                q8Ready -> TextAction("Sil", SY.Error) { vm.deleteModel(WhisperModel.TURBO_Q8); q8Refresh++ }
-                else -> TextAction("İndir", SY.Accent) { vm.downloadModel(WhisperModel.TURBO_Q8) }
-            }
-        }
-        Text(
-            "Karşılaştırma için dili Türkçe seç, aynı sesi her ayarla en az 3 kez dök. İlk tur (model yükleme) soğuk sayılır.",
-            fontSize = 12.sp, color = SY.Muted,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Pill("ML Kit Basic", bg = SY.Chip, fg = SY.Text, onClick = { runMlKit(false) })
-            Pill("ML Kit Advanced", bg = SY.Chip, fg = SY.Text, onClick = { runMlKit(true) })
-        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill("Süreleri paylaş", bg = SY.Chip, fg = SY.Text, onClick = {
                 if (!shareCsv(context)) vm.toast("Henüz kayıt yok (geliştirici modu açıkken dökülen sesler kaydedilir)")
@@ -401,7 +254,6 @@ private fun DevTools(vm: MainViewModel, s: MainState, onClose: () -> Unit) {
             Pill("Sil", bg = SY.Chip, fg = SY.Text, onClick = { ResultLog.clear(context); vm.toast("Kayıtlar silindi") })
             Pill("Kapat", bg = SY.Chip, fg = SY.Text, onClick = { vm.disableDevMode(); onClose() })
         }
-        s.testLog.forEach { Text(it, fontSize = 12.sp, color = SY.Text) }
     }
 }
 
