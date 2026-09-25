@@ -73,7 +73,8 @@ import com.aitolian.sesyazibench.engine.WhisperModel
 import kotlinx.coroutines.launch
 
 // Yayın öncesi bu uygulamaya özel adreslerle güncellenmeli
-private const val PRIVACY_URL = "https://mrzekai.github.io/privacy-policy.html"
+// Yalnız MuteRead'e ait politika (store/muteread-privacy.html; GitHub Pages'te yayınlanır)
+private const val PRIVACY_URL = PRIVACY_POLICY_URL
 private const val SUPPORT_EMAIL = "aitolianrock@gmail.com"
 
 private const val LICENSES =
@@ -131,11 +132,11 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                         2 to ("🔒 Telefonda" to "Ses telefonundan hiç çıkmaz, internetsiz. Uzun seslerde yavaş."),
                     ).forEach { (m, texts) ->
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { vm.setEngineMode(m) },
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { vm.setEngineMode(m, grantConsent = true) },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(
-                                selected = s.engineMode == m, onClick = { vm.setEngineMode(m) },
+                                selected = s.engineMode == m, onClick = { vm.setEngineMode(m, grantConsent = true) },
                                 colors = RadioButtonDefaults.colors(selectedColor = SY.Accent, unselectedColor = SY.Muted),
                             )
                             Column(Modifier.weight(1f)) {
@@ -227,8 +228,9 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
             Group("Gizlilik") {
                 Text(
                     (if (s.engineMode == 1) "Hızlı modda ses, yazıya dökülmek için Meta Wit.ai'ye gönderilir. Meta bu " +
-                        "verileri kendi koşulları ve gizlilik politikası kapsamında işler; ses verileri 90 güne kadar " +
-                        "saklanabilir. Bizim bir sunucumuz yok; notların ve sesin geçici kopyası yalnızca telefonunda tutulur. " +
+                        "verileri kendi koşulları kapsamında işler; Wit.ai politikasına göre ses verileri en fazla 90 gün " +
+                        "saklanır ve konuşma tanımayı geliştirmek için analiz edilebilir. " +
+                        "Bizim bir sunucumuz yok; notların ve sesin geçici kopyası yalnızca telefonunda tutulur. " +
                         "\"Telefonda\" seçersen ses telefonundan çıkmaz. "
                     else "Sesin telefonundan çıkmaz; yazıya dökme cihazda yapılır. Notların telefonunda tutulur. ") +
                         "Çeviri cihazda yapılır. Reklamlar Google AdMob tarafından gösterilir. " +

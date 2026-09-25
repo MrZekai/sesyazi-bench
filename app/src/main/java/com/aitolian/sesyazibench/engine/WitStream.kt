@@ -44,12 +44,17 @@ internal class WitEvent(
 internal fun parseWitEvent(json: String): WitEvent {
     val o = try { JSONObject(json) } catch (_: JSONException) { throw IOException(WIT_ERR_INVALID) }
     if (o.has("error")) throw IOException(WIT_ERR_SERVICE)
-    val type = o.optString("type")
-    val recognized = o.has("text") || o.has("is_final") ||
-        type.equals("FINAL_TRANSCRIPTION", ignoreCase = true) || type.equals("PARTIAL_TRANSCRIPTION", ignoreCase = true)
+    // Şema: metin alanı gerçekten DİZGİ olmalı (sayı/nesne metne çevrilmez); yalnız
+    // "is_final" taşıyan nesne transkripsiyon sayılmaz. Tür (type) bilinen bir değer olabilir.
+    val type = o.opt("type") as? String ?: ""
+    val knownType = type.equals("FINAL_TRANSCRIPTION", ignoreCase = true) || type.equals("PARTIAL_TRANSCRIPTION", ignoreCase = true)
+    val rawText = o.opt("text")
+    val textOk = rawText is String
+    if (o.has("text") && !textOk && !o.isNull("text")) throw IOException(WIT_ERR_SCHEMA)
+    val recognized = textOk || knownType
     if (!recognized) return WitEvent("", false, -1, -1, recognized = false)
-    val text = o.optString("text").trim()
-    val isFinal = o.optBoolean("is_final", false) || type.equals("FINAL_TRANSCRIPTION", ignoreCase = true)
+    val text = (rawText as? String ?: "").trim()
+    val isFinal = (o.opt("is_final") as? Boolean ?: false) || type.equals("FINAL_TRANSCRIPTION", ignoreCase = true)
     var start = -1L
     var end = -1L
     o.optJSONObject("speech")?.optJSONArray("tokens")?.let { toks ->

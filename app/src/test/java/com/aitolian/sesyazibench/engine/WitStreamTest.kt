@@ -114,6 +114,23 @@ class WitStreamTest {
         assertEquals(1, st.unknownEvents)
     }
 
+    @Test fun onlyIsFinalFieldIsNotATranscription() {
+        val st = WitStreamState()
+        st.onEvent(parseWitEvent("""{"is_final":true}"""))
+        expectCode(WIT_ERR_SCHEMA) { st.finish() }
+    }
+
+    @Test fun nonStringTextIsSchemaError() {
+        expectCode(WIT_ERR_SCHEMA) { parseWitEvent("""{"text":123,"is_final":true}""") }
+    }
+
+    @Test fun typedFinalWithoutIsFinalFlagCounts() {
+        val st = WitStreamState()
+        st.onEvent(parseWitEvent("""{"type":"FINAL_TRANSCRIPTION","text":"tamam"}"""))
+        st.finish()
+        assertEquals(1, st.finals.size)
+    }
+
     @Test fun transcriptionWithoutAnyFinalIsNoFinal() {
         val st = WitStreamState()
         st.onEvent(parseWitEvent("""{"text":"","is_final":false}"""))

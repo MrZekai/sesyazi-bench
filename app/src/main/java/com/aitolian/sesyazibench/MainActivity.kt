@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import com.aitolian.sesyazibench.ads.Ads
 import com.aitolian.sesyazibench.ui.MainScreen
 import com.aitolian.sesyazibench.ui.SesYaziTheme
+import com.aitolian.sesyazibench.ui.CloudConsentDialog
 import com.aitolian.sesyazibench.ui.isDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -60,6 +61,8 @@ class MainActivity : ComponentActivity() {
                         lifecycleScope.launch { Ads.showWhenReady(this@MainActivity, stillWanted = vm::adStillWanted) }
                     },
                 )
+                // İlk bulut aktarımından önce seçim (hangi ekran açık olursa olsun)
+                CloudConsentDialog(vm)
             }
         }
     }

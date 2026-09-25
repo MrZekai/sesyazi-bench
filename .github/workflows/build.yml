@@ -45,17 +45,24 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:testReleaseUnitTest --stacktrace
 
-      - name: Yükleme anahtarı (secret varsa)
+      - name: Yükleme anahtarı (zorunlu)
         env:
           UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+          UPLOAD_STORE_PASSWORD: ${{ secrets.UPLOAD_STORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
         run: |
           if [ -n "$UPLOAD_KEYSTORE_B64" ]; then
             printf '%s' "$UPLOAD_KEYSTORE_B64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/upload.jks"
             echo "UPLOAD_KEYSTORE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
             echo "Yükleme anahtarıyla imzalanacak"
           else
-            echo "UPLOAD_KEYSTORE_B64 yok → debug anahtarı (Play'e yüklenemez)"
+            # Play'e gidecek paket debug imzalı çıkmasın: açık hatayla dur
+            echo "HATA: UPLOAD_KEYSTORE_B64 secret'ı yok. Play'e yüklenebilir paket üretilemez."; exit 1
           fi
+          for v in UPLOAD_STORE_PASSWORD UPLOAD_KEY_ALIAS UPLOAD_KEY_PASSWORD; do
+            [ -n "${!v}" ] || { echo "HATA: $v secret'ı yok."; exit 1; }
+          done
 
       - name: Build release APK + AAB
         env:
@@ -74,6 +81,32 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
 
+      # Yayına uygun çıktı YALNIZ denetimler geçerse yüklenir
+      - name: 16 KB hizalama denetimi (APK içindeki her .so)
+        run: |
+          mkdir -p so && unzip -o -q app/build/outputs/apk/release/app-release.apk 'lib/*' -d so
+          files=$(find so/lib -name '*.so')
+          count=$(echo "$files" | grep -c '\.so$' || true)
+          [ "$count" -gt 0 ] || { echo "HATA: APK'da .so bulunamadı"; exit 1; }
+          bad=0
+          for f in $files; do
+            out=$(readelf -lW "$f") || { echo "HATA: readelf okuyamadı: $f"; bad=1; continue; }
+            aligns=$(echo "$out" | awk '$1=="LOAD"{print $NF}')
+            [ -n "$aligns" ] || { echo "HATA: LOAD segmenti yok: $f"; bad=1; continue; }
+            ok=1
+            for align in $aligns; do [ $((align)) -ge 16384 ] || ok=0; done
+            if [ $ok -eq 1 ]; then echo "tamam: $(basename $f)"; else echo "UYUMSUZ: $(basename $f)"; bad=1; fi
+          done
+          echo "$count .so denetlendi"
+          [ $bad -eq 0 ] || { echo "16 KB hizalama başarısız"; exit 1; }
+
+      - name: AAB imza denetimi (debug imzası olmamalı)
+        run: |
+          owner=$(keytool -J-Duser.language=en -printcert -jarfile app/build/outputs/bundle/release/app-release.aab | grep -m1 'Owner:' || true)
+          echo "$owner"
+          [ -n "$owner" ] || { echo "HATA: AAB imzası okunamadı"; exit 1; }
+          if echo "$owner" | grep -q 'Android Debug'; then echo "HATA: AAB debug anahtarıyla imzalı"; exit 1; fi
+
       - name: Rename outputs
         run: |
           mkdir -p out
@@ -85,17 +118,3 @@ jobs:
           name: MuteRead-${{ github.run_number }}
           path: out/*
           retention-days: 30
-
-      # Çıktılar yüklendikten SONRA: uyumsuzlukta derleme kırmızı olur ama APK yine indirilebilir
-      - name: 16 KB hizalama denetimi (APK içindeki her .so)
-        run: |
-          mkdir -p so && unzip -o -q app/build/outputs/apk/release/app-release.apk 'lib/*' -d so
-          bad=0
-          for f in $(find so/lib -name '*.so'); do
-            ok=1
-            for align in $(readelf -lW "$f" | awk '$1=="LOAD"{print $NF}'); do
-              [ $((align)) -ge 16384 ] || ok=0
-            done
-            if [ $ok -eq 1 ]; then echo "tamam: $(basename $f)"; else echo "UYUMSUZ: $(basename $f)"; bad=1; fi
-          done
-          [ $bad -eq 0 ] || { echo "16 KB hizalama başarısız"; exit 1; }

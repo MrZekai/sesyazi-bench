@@ -77,6 +77,14 @@ class Prefs(context: Context) {
         get() = p.getInt("engine_mode", 0)
         set(v) = p.edit().putInt("engine_mode", v).apply()
 
+    /**
+     * İlk bulut aktarımı onayı: 0 = sorulmadı, 1 = "İnternetle devam et" (ya da Ayarlar'da
+     * açıklamayı görerek Hızlı seçildi). Reddetme/kapatma kabul sayılmaz.
+     */
+    var cloudConsent: Int
+        get() = p.getInt("cloud_consent", 0)
+        set(v) = p.edit().putInt("cloud_consent", v).apply()
+
     var devMode: Boolean
         get() = p.getBoolean("dev", false)
         set(v) = p.edit().putBoolean("dev", v).apply()

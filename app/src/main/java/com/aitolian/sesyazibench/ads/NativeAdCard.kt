@@ -84,13 +84,22 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
     )
 }
 
+private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
 private const val NATIVE_TRIES = 3
 private const val NATIVE_RETRY_MS = 20_000L
 
 /** Tek yükleme denemesi; başarısızsa null. İptal edilirse gelen reklam yok edilir. */
 private suspend fun loadNative(context: Context): NativeAd? = suspendCancellableCoroutine { cont ->
     val loader = AdLoader.Builder(context, Ads.NATIVE_ID)
-        .forNativeAd { n -> if (cont.isActive) cont.resume(n) else n.destroy() }
+        .forNativeAd { n ->
+            if (cont.isActive) {
+                // Teslim ile devam arasında iptal olursa reklam sahipsiz kalmasın: ana iş parçacığında yok et
+                cont.resume(n) { _, abandoned, _ -> abandoned?.let { a -> mainHandler.post { a.destroy() } } }
+            } else {
+                n.destroy()
+            }
+        }
         .withAdListener(object : AdListener() {
             override fun onAdFailedToLoad(error: LoadAdError) {
                 Log.w("Ads", "native load: ${error.message}")

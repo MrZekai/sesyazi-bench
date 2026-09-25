@@ -231,10 +231,11 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                             else -> SyncedParagraphs(blocks, active, font, lineMul, tracker)
                         }
                         if (s.suggestBest && s.hasAudio && !working && s.refining == null) SuggestBest(onRun = vm::refineWithBest)
-                        if (r.warnings.isNotEmpty() && r.editedText == null) {
+                        // Düzenleme doğrulama sayılmaz: uyarı her zaman görünür; yalnız yeniden dökme düzenlenmemiş notta
+                        if (r.warnings.isNotEmpty()) {
                             WarningsCard(
                                 r.warnings,
-                                canRetry = s.hasAudio && !working && s.refining == null && vm.cloudAvailable,
+                                canRetry = r.editedText == null && s.hasAudio && !working && s.refining == null && vm.cloudAvailable,
                                 onRetry = vm::retryWarning,
                             )
                         }

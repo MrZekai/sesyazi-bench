@@ -29,6 +29,7 @@ import com.aitolian.sesyazibench.engine.WhisperModel
 import com.aitolian.sesyazibench.engine.WitEngine
 import com.aitolian.sesyazibench.engine.langOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -114,7 +115,13 @@ data class MainState(
     val followAudio: Boolean = true,
     /** Tema: 0 sistem, 1 açık, 2 koyu. */
     val themeMode: Int = 0,
+    /** İlk bulut aktarımından önce seçim penceresi açık mı. */
+    val consentAsk: Boolean = false,
 )
+
+const val CONSENT_CANCEL = 0
+const val CONSENT_CLOUD = 1
+const val CONSENT_LOCAL = 2
 
 /** Mono/kanal enerji oranı bunun altındaysa (zıt fazlı stereo) tek kanal kullanılır. */
 private const val ANTI_PHASE_RATIO = 0.1
@@ -255,7 +262,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Hızlı mod bu derlemede kullanılabilir mi (en az bir dil anahtarı var mı)? */
     val cloudAvailable: Boolean get() = WitEngine.tokens.isNotEmpty()
 
-    fun setEngineMode(m: Int) {
+    /**
+     * @param grantConsent Ayarlar'da, aktarım açıklaması görülerek Hızlı seçildiyse true
+     *   (ilk aktarım penceresi bir daha sorulmaz).
+     */
+    fun setEngineMode(m: Int, grantConsent: Boolean = false) {
+        if (m == 1 && grantConsent) prefs.cloudConsent = CONSENT_CLOUD
         prefs.engineMode = m
         _state.update { it.copy(engineMode = m) }
         // Hızlı modda dil, küçük modelle telefonda bulunur: Wi‑Fi'deyse şimdiden indir
@@ -301,7 +313,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun adStillWanted(): Boolean {
         val s = state.value
         val cur = session ?: return false
-        if (cur.firstVisibleAt != 0L || !s.livePartial.isNullOrBlank()) return false
+        if (cur.firstVisibleAt != 0L || !s.livePartial.isNullOrBlank() || s.consentAsk) return false
         return isWorking && s.result == null && s.live.isEmpty() &&
             (s.phase is Phase.Transcribing || s.phase is Phase.Preparing || s.phase is Phase.Downloading)
     }
@@ -523,6 +535,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun transcribe(s: Session, a: DecodedAudio, importMs: Long, forceLocal: Boolean = false) {
+        // İlk bulut aktarımından ÖNCE açık seçim (Play kullanıcı verisi politikası):
+        // seçim yapılmadan ses gönderilmez; kapatma/geri kabul sayılmaz.
+        if (!forceLocal && cloudAvailable && engineChoice() == 1 && online() && prefs.cloudConsent != CONSENT_CLOUD) {
+            when (askCloudConsent(s)) {
+                CONSENT_CLOUD -> prefs.cloudConsent = CONSENT_CLOUD
+                CONSENT_LOCAL -> {
+                    setEngineMode(2)
+                    transcribe(s, a, importMs, forceLocal = true)
+                    return
+                }
+                else -> {
+                    abandon(s, "Vazgeçildi; ses gönderilmedi")
+                    return
+                }
+            }
+            if (!s.alive()) return
+        }
         // Hızlı mod: önce internet (Wit.ai); olmazsa aşağıda telefonda devam eder
         var cloudFailed = false
         if (!forceLocal && cloudAvailable && engineChoice() == 1) {
@@ -967,6 +996,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 else it.copy(history = h)
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // İlk bulut aktarımı onayı
+    // ------------------------------------------------------------------
+    private var consentWaiter: CompletableDeferred<Int>? = null
+
+    private suspend fun askCloudConsent(s: Session): Int {
+        val d = CompletableDeferred<Int>()
+        consentWaiter = d
+        s.update { it.copy(consentAsk = true) }
+        return try {
+            d.await()
+        } finally {
+            if (consentWaiter === d) consentWaiter = null
+            _state.update { it.copy(consentAsk = false) }
+        }
+    }
+
+    /** Penceredeki seçim: [CONSENT_CLOUD], [CONSENT_LOCAL] ya da [CONSENT_CANCEL] (kapatma dahil). */
+    fun answerCloudConsent(choice: Int) {
+        consentWaiter?.complete(choice)
+    }
+
+    /** "Telefonda işle" için gerekecek indirme (pencerede gösterilir); hazırsa null. */
+    fun localModelDownloadMb(): Int? {
+        val q = state.value.quality
+        return if (localReadyQuality(q) != null) null else q.model.approxMb
+    }
+
+    /** Oturumu sonuç üretmeden bitirir; yeniden dökümse önceki not geri gelir. */
+    private fun abandon(s: Session, message: String) {
+        s.update {
+            val prev = it.previousResult
+            if (prev != null) it.copy(result = prev, previousResult = null, phase = Phase.Idle, live = emptyList(), livePartial = null, etaSec = null, toast = message)
+            else it.copy(phase = Phase.Idle, live = emptyList(), livePartial = null, etaSec = null, toast = message)
+        }
+        cancel(s)
     }
 
     /** Çalışan işi iptal eder. Yeniden döküm iptalinde önceki not geri gelir. */
