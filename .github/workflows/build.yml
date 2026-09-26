@@ -99,7 +99,15 @@ jobs:
               aligns=$(readelf -lW "so/$f" 2>/dev/null | awk '$1=="LOAD"{print $NF}' || true)
               [ -n "$aligns" ] || { echo "::error::okunamadı: $f"; bad=1; continue; }
               ok=1; for a in $aligns; do [ $((a)) -ge 16384 ] || ok=0; done
-              if [ $ok -eq 1 ]; then echo "tamam: $f"; else echo "::error::16 KB hizalı değil: $f"; bad=1; fi
+              if [ $ok -eq 1 ]; then echo "tamam: $f"
+            else
+              case "$f" in
+                # 16 KB sayfa yalnız 64 bit cihazlarda var (Google gereksinimi arm64-v8a / x86_64);
+                # 32 bit kütüphaneler 4 KB sayfalı cihazlarda çalışır → bilgi, kapı değil
+                lib/armeabi-v7a/*|lib/x86/*) echo "bilgi (32 bit, gereksinim dışı): $f" ;;
+                *) echo "::error::16 KB hizalı değil: $f"; bad=1 ;;
+              esac
+            fi
             done <<< "$libs"
           fi
           BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
