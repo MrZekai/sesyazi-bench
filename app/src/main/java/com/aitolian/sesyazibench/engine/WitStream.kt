@@ -251,3 +251,17 @@ internal class JsonStreamSplitter(private val maxChars: Int = 1_048_576) {
         if (depth != 0 || inString || buf.isNotEmpty()) throw IOException(WIT_ERR_TRUNCATED)
     }
 }
+
+/**
+ * Retry-After başlığı: saniye ("120") ya da HTTP tarihi ("Wed, 21 Oct 2026 07:28:00 GMT").
+ * Okunamazsa null. Geçmiş tarih 0 olur.
+ */
+internal fun parseRetryAfterMs(header: String?, nowMs: Long): Long? {
+    val h = header?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    h.toLongOrNull()?.let { return (it.coerceAtLeast(0) * 1000L) }
+    return runCatching {
+        val f = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US)
+        f.timeZone = java.util.TimeZone.getTimeZone("GMT")
+        (f.parse(h)!!.time - nowMs).coerceAtLeast(0)
+    }.getOrNull()
+}

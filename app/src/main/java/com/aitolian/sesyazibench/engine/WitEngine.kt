@@ -112,6 +112,8 @@ class WitEngine(
         private const val CHUNK_MIN_MS = 25_000L
         private const val PARALLEL = 3
         private const val MAX_TRIES = 3
+        /** Sunucunun istediği bekleme bundan uzunsa beklemeyiz, yoğunluk hatası veririz. */
+        private const val MAX_RATE_WAIT_MS = 15_000L
         /** Aynı cihazdan art arda istek başlatma aralığı (dakikalık kota için yumuşatma). */
         private const val MIN_START_GAP_MS = 300L
         private const val MAX_FRAME_CHARS = 1_048_576
@@ -334,7 +336,10 @@ class WitEngine(
                 when (e.code) {
                     ERR_AUTH -> { authDead.set(true); return ChunkOutcome.Failure(ERR_AUTH) }
                     ERR_RATE -> {
-                        val wait = (e.retryAfterMs ?: (2_000L * (attempt + 1))).coerceIn(1_000L, 15_000L)
+                        // Sunucu 15 sn'den uzun bekle diyorsa erken tekrar yok: yoğunluk hatası
+                        val asked = e.retryAfterMs
+                        if (asked != null && asked > MAX_RATE_WAIT_MS) return ChunkOutcome.Failure(ERR_RATE)
+                        val wait = (asked ?: (2_000L * (attempt + 1))).coerceIn(1_000L, MAX_RATE_WAIT_MS)
                         cooldownUntil = maxOf(cooldownUntil, SystemClock.elapsedRealtime() + wait)
                     }
                     else -> if (attempt < MAX_TRIES - 1) delay(700L * (attempt + 1))
@@ -420,7 +425,7 @@ class WitEngine(
                     code == 401 || code == 403 -> WitHttpException(ERR_AUTH)
                     code == 429 -> WitHttpException(
                         ERR_RATE,
-                        conn.getHeaderField("Retry-After")?.trim()?.toLongOrNull()?.times(1000),
+                        parseRetryAfterMs(conn.getHeaderField("Retry-After"), System.currentTimeMillis()),
                     )
                     code in 500..599 -> WitHttpException(ERR_SERVER)
                     else -> WitHttpException("WIT_HTTP_$code")

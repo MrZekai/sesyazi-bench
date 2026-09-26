@@ -17,7 +17,12 @@ object Notifier {
     private const val CHANNEL = "transcript_done"
     @Volatile var appVisible = true
 
-    fun notifyDone(c: Context, preview: String) {
+    const val EXTRA_NOTE_ID = "note_id"
+
+    /**
+     * Kilit ekranında metin gösterilmez (genel başlık); dokununca ilgili not açılır.
+     */
+    fun notifyDone(c: Context, noteId: Long) {
         if (appVisible || !com.aitolian.sesyazibench.data.Prefs(c).notifyWhenDone) return
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -30,14 +35,16 @@ object Notifier {
         }
         val open = PendingIntent.getActivity(
             c, 0,
-            Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            Intent(c, MainActivity::class.java)
+                .putExtra(EXTRA_NOTE_ID, noteId)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_fg)
             .setContentTitle("Metnin hazır")
-            .setContentText(preview)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(preview))
+            .setContentText("Açmak için dokun")
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

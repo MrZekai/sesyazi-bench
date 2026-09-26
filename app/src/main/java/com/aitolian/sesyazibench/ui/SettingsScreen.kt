@@ -91,9 +91,14 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
     var packs by remember { mutableStateOf<List<Lang>?>(null) }
     var versionTaps by remember { mutableIntStateOf(0) }
     var devMode by remember { mutableStateOf(vm.prefs.devMode) }
-    var notify by remember { mutableStateOf(vm.prefs.notifyWhenDone) }
+    // Anahtar gerçeği gösterir: Android 13+ izni yoksa kapalı görünür
+    fun notifAllowed() = android.os.Build.VERSION.SDK_INT < 33 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    var notify by remember { mutableStateOf(vm.prefs.notifyWhenDone && notifAllowed()) }
     var confirmClear by remember { mutableStateOf(false) }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notify = granted
+        vm.prefs.notifyWhenDone = granted
         if (!granted) vm.toast("Bildirim izni verilmedi; işlem bitince haber verilemez")
     }
     var showLicenses by remember { mutableStateOf(false) }

@@ -3,6 +3,24 @@ package com.aitolian.sesyazibench.engine
 /** Cümle bölme ve okuma vurgusu birimleri. Android bağımlılığı yok (birim testlerde kullanılır). */
 object Sentences {
 
+    /**
+     * Altyazı için: zamanı örtüşen parçaları tek cue'da birleştirir (aynı segmentten
+     * gelen iki cümle çevirisi aynı aralığı taşır). Yeni kesin zaman uydurulmaz.
+     */
+    fun mergeOverlappingCues(items: List<Segment>): List<Segment> {
+        val out = mutableListOf<Segment>()
+        for (s in items.sortedBy { it.startMs }) {
+            val p = out.lastOrNull()
+            if (p != null && s.startMs < p.endMs) {
+                out[out.lastIndex] = p.copy(
+                    endMs = maxOf(p.endMs, s.endMs), text = p.text + " " + s.text,
+                    approx = p.approx || s.approx,
+                )
+            } else out += s
+        }
+        return out
+    }
+
     private val SPLIT = Regex("(?<=[.!?…。؟])\\s+")
     private const val ENDERS = ".!?…。؟"
 

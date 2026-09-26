@@ -1,7 +1,7 @@
-# MuteRead — Play Console kapalı test kontrol listesi
+# Play Console kapalı test kontrol listesi (görünen ad henüz kararlaştırılmadı)
 
 Paket: `com.aitolian.muteread` · Gizlilik politikası: https://mrzekai.github.io/muteread-privacy.html
-(Kaynak: `store/muteread-privacy.html`; yayın betiği onu GitHub Pages'e koyar.)
+(Kaynak: `store/muteread-privacy.html`; `guncelle-v1.2x.sh` onu ayrı Pages deposuna (MrZekai/mrzekai.github.io) iter. **Yayında olduğunu tarayıcıda, gizli sekmede aç ve HTTP 200 + doğru paket adıyla doğrula** — yerel dosya kanıt değildir.)
 
 ## 1. Uygulama içeriği (App content)
 
@@ -25,7 +25,7 @@ Genel: veriler aktarımda şifreleniyor → **Evet**. Hesap yok.
 | Cihaz veya diğer kimlikler | Evet (AdMob) | Evet (AdMob) | Zorunlu | Reklam, analiz, dolandırıcılık önleme | Google'ın AdMob veri açıklaması rehberine göre doldur |
 | Konum → Yaklaşık konum | Evet (AdMob, IP) | Evet | Zorunlu | Reklam | AdMob rehberi |
 | Uygulama etkinliği → Uygulama etkileşimleri | Evet (AdMob) | Evet | Zorunlu | Reklam, analiz | AdMob rehberi |
-| Uygulama bilgileri ve performans → Tanılama | Evet (AdMob) | Hayır | Zorunlu | Analiz | AdMob rehberi |
+| Uygulama bilgileri ve performans → Tanılama | Evet (AdMob) | AdMob rehberine göre (kör 'Hayır' yazma) | Zorunlu | Analiz | Projedeki SDK 24.4.0 için rehberi ayrıca eşleştir |
 
 Toplanmayanlar: ad, e-posta, kişiler, fotoğraf, dosya içeriği (ses dışında), mesajlar, konum (hassas), finans, sağlık.
 Notlar ve metinler yalnız telefonda → **toplanmıyor**. Uygulama içi çeviri cihazda.

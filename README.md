@@ -1,47 +1,35 @@
-# SesYazı (V1 prototip)
+# Ses → Yazı (Android)
 
-"Ses → Yazı" uygulaması için **10 günlük fizibilite prototipi**. Amaç tek bir soruyu cevaplamak:
+Sesli mesajı, ses dosyasını ya da videonun sesini yazıya döker. Görünen ad henüz kesinleşmedi;
+tek kaynak `app/src/main/res/values/strings.xml` → `app_name`. Paket: `com.aitolian.muteread`
+(Play'de kayıtlı kimlik; görünen addan bağımsız, toplu değiştirilmez).
 
-> 60 saniyelik Türkçe sesli mesaj, orta segment bir telefonda **15 saniyenin altında** okunur metne dönüşüyor mu?
+## Mimari (v1.22+)
 
-**Güncel mimari (v1.11+):** Yazıya dökme varsayılan olarak **Meta Wit.ai** (ücretsiz, dil başına ayrı Wit uygulaması; anahtarlar GitHub secret `WIT_TOKENS` ile derlemede gelir) üzerinden yapılır — ses Meta'ya gönderilir. İnternet yoksa, anahtar/kota hatasında ya da Ayarlar'da "Telefonda" seçiliyse cihaz içi whisper.cpp kullanılır. Kendi sunucumuz yok.
+- **Yazıya dökme yalnız Meta Wit.ai** (`/dictation`, dil başına ayrı Wit uygulaması). Anahtarlar
+  GitHub secret `WIT_TOKENS` (JSON `{"tr":"…","en":"…"}`) ile derlemede gelir; repoda/logda yok.
+  Cihaz içi model, çevrimdışı yedek ve otomatik dil algılama **yok**. İnternet yoksa açık hata.
+- Ses sessiz yerlerden ≤ 50 sn parçalara bölünür, en fazla 3 paralel istek; parça başına 3 deneme,
+  429'da `Retry-After`'a uyulur (15 sn'den uzunsa yoğunluk hatası). İki turda da dökülemeyen
+  aralık notta `[⚠ …]` + yapılandırılmış uyarı olarak işaretlenir, bölüm bazında yeniden dökülebilir.
+- Dil: kayıtlı tercih → telefon dili → İngilizce. Ana sayfadan ve not menüsünden değiştirilir.
+- Çeviri: Google ML Kit, cihazda.
+- Reklam: AdMob (ana sayfa native, not ekranı banner, döküm başında geçiş reklamı — yalnız ekranda
+  henüz metin yokken; metin gelirse o dökümde reklam atlanır).
+- Kendi sunucumuz yok. Notlar cihazda (en fazla 50).
 
-## Karşılaştırılan motorlar
+## Derleme
 
-| Motor | Ne | Not |
-|---|---|---|
-| whisper.cpp v1.9.4 | tiny / base / small (q5_1), large-v3-turbo (q5_0) | Model uygulama içinden bir kez indirilir (Hugging Face) |
-| ML Kit GenAI — BASIC | Android'in cihaz içi tanıyıcısı | `1.0.0-alpha1`, Türkçe beta |
-| ML Kit GenAI — ADVANCED (“ML Kit+”) | Gemini Nano tabanlı | Yalnız destekleyen üst segment cihazlar |
+`main`e her push'ta GitHub Actions çalışır: WIT_TOKENS doğrulama → birim testleri → imzalı
+APK + AAB (yükleme anahtarı zorunlu) → 16 KB kapısı (ELF + ZIP hizalama, başarısızsa durur) →
+AAB imza denetimi (SHA-256 logda) → `app-<N>` artifact'i (`BUILD-INFO.txt`: commit + SHA-256).
 
-## APK nasıl alınır
-
-`main`e her push'ta GitHub Actions **Build benchmark APK** iş akışı çalışır → Actions sekmesinde çalıştırmaya gir → *Artifacts* altından `SesYaziBench-apk-N` indir → zip içindeki APK'yı telefona kur.
-
-APK debug anahtarıyla imzalıdır; **Play'e yüklenmez**, sadece test içindir.
-
-## Test protokolü
-
-1. Uygulamada modeli seç ve **İndir** (önce `base`, sonra `small`).
-2. WhatsApp'ta bir sesli mesaja uzun bas → **Paylaş** → **SesYazı Bench**.
-3. Dili seç (Türkçe) → **Hepsini sırayla çalıştır**.
-4. Her dosya için tekrarla. Hedef seti:
-   - 10 × Türkçe (5–30 sn), 10 × Türkçe (45–90 sn), 5 × gürültülü ortam, 5 × başka dil
-5. **Sonuçları paylaş (CSV)** → dosyayı Claude'a gönder.
-
-Kart renkleri: **GEÇTİ** = RTF ≤ 0,25 · **YAVAŞ** = hedefin üstünde · **HATA** = motor çalışmadı.
-
-## Karar kriteri
-
-- base veya small, orta segment cihazda Türkçe için RTF ≤ 0,25 **ve** metin okunur → ürüne geç.
-- Sadece tiny hedefi tutturuyor ama kalite zayıf → dil setini daralt / ML Kit'i ana motor yap.
-- Hiçbiri tutmuyor → fikri durdur.
-
-## Yapı
+## Dizinler
 
 ```
-app/src/main/cpp/            whisper.cpp JNI köprüsü (CMake FetchContent ile v1.9.4)
-app/src/main/java/.../audio  MediaCodec ile her formatı 16 kHz mono'ya çözme
-app/src/main/java/.../engine whisper + ML Kit motorları, model indirme
-app/src/main/java/.../ui     Compose ekranı
+app/src/main/java/.../engine  Wit istemcisi (WitEngine, WitStream), cümle birimleri, çeviri
+app/src/main/java/.../audio   MediaCodec çözücü, 16 kHz mono dönüştürme, oynatıcı
+app/src/main/java/.../data    Notlar (HistoryStore), dışa aktarma, tercihler
+app/src/main/java/.../ui      Compose ekranları
+store/                        Gizlilik politikası, mağaza metinleri, Play Console listesi
 ```

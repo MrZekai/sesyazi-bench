@@ -143,6 +143,7 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
     val font = s.readerFont
     val lineMul = LINE_MUL[s.readerLine.coerceIn(0, 2)]
     val working = s.phase is Phase.Transcribing || s.phase is Phase.Preparing
+    val saveScope = rememberCoroutineScope()
 
     /** Kaydedilmemiş düzenleme varsa önce sor. */
     fun leaveEditThen(action: () -> Unit) {
@@ -257,7 +258,9 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
             ) {
                 if (editing) {
                     BarButton("Vazgeç", Modifier.weight(1f), filled = false) { leaveEditThen {} }
-                    BarButton("Kaydet", Modifier.weight(1f), filled = true) { vm.saveEdit(draft); editing = false }
+                    BarButton("Kaydet", Modifier.weight(1f), filled = true) {
+                        saveScope.launch { if (vm.saveEdit(draft, draftBase)) editing = false }
+                    }
                 } else {
                     // Çeviri sekmesinde çeviri hazır değilken kopyalanacak/paylaşılacak metin yok
                     val ready = !shownText.isNullOrBlank()
@@ -298,7 +301,12 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
             title = { Text("Değişiklikler kaydedilmedi") },
             text = { Text("Düzenlemeyi kaydetmeden çıkarsan yaptığın değişiklikler kaybolur.") },
             confirmButton = {
-                TextButton(onClick = { vm.saveEdit(draft); editing = false; confirmDiscard = null; next() }) {
+                TextButton(onClick = {
+                    saveScope.launch {
+                        confirmDiscard = null
+                        if (vm.saveEdit(draft, draftBase)) { editing = false; next() }
+                    }
+                }) {
                     Text("Kaydet", color = SY.Accent)
                 }
             },
@@ -335,9 +343,9 @@ private fun NoteTopBar(
             IconTap(Icons.Filled.MoreVert, "Diğer seçenekler") { menu = true }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (s.hasAudio && !working) {
-                    if (!r.isCloud()) {
+                    run {
                         DropdownMenuItem(
-                            text = { Text("⚡ Yeniden dök") },
+                            text = { Text("⚡ Yeniden dök (${langOf(r.language)?.label ?: r.language})") },
                             onClick = { menu = false; vm.retranscribe(langOf(r.language)?.takeIf { it in vm.speechLangs } ?: s.lang) },
                         )
                     }
@@ -863,12 +871,21 @@ private fun WarningsCard(warnings: List<RangeWarning>, canRetry: Boolean, onRetr
             .border(1.dp, SY.Error.copy(alpha = .45f), RoundedCornerShape(14.dp)).background(SY.Card).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        val failed = warnings.count { it.reason == RangeWarning.FAILED }
         Text(
-            if (warnings.size == 1) "⚠ Bir bölüm tam doğrulanamadı" else "⚠ ${warnings.size} bölüm tam doğrulanamadı",
+            when {
+                failed == warnings.size -> if (failed == 1) "⚠ Bir bölüm yazıya dökülemedi" else "⚠ $failed bölüm yazıya dökülemedi"
+                warnings.size == 1 -> "⚠ Bir bölüm tam doğrulanamadı"
+                else -> "⚠ ${warnings.size} bölümde sorun var"
+            },
             fontSize = 14.sp, color = SY.Text, fontWeight = FontWeight.Medium,
         )
         Text(
-            "Bu aralıkta bir satır yeniden başlamış görünüyor ama kesinleşmedi; metin eksik olabilir.",
+            when {
+                failed == warnings.size -> "Bağlantı ya da hizmet hatası nedeniyle bu aralık metinde yok."
+                failed == 0 -> "Bu aralıkta bir satır yeniden başlamış görünüyor ama kesinleşmedi; metin eksik olabilir."
+                else -> "Bazı aralıklar yazıya dökülemedi, bazıları kesinleşmedi; metin eksik olabilir."
+            },
             fontSize = 12.5.sp, color = SY.Muted, lineHeight = 17.sp,
         )
         warnings.forEach { w ->
@@ -904,7 +921,7 @@ private fun MoreAction(s: MainState, r: Transcript, modifier: Modifier, onEdit: 
                     open = false
                     val text = if (tr) s.translation?.let { paragraphs(it).joinToString("\n\n") } else r.editedText ?: paragraphs(r.segments).joinToString("\n\n")
                     if (text == null) toastLater(context, "Çeviri henüz hazır değil")
-                    else Exports.shareTxt(context, r, text, suffix)
+                    else if (!Exports.shareTxt(context, r, text, suffix)) toastLater(context, "Dosya oluşturulamadı (depolama dolu olabilir)")
                 },
             )
             DropdownMenuItem(
@@ -923,7 +940,9 @@ private fun MoreAction(s: MainState, r: Transcript, modifier: Modifier, onEdit: 
                     if (segs == null) toastLater(context, "Çeviri henüz hazır değil")
                     else {
                         val suf = suffix + if (!tr && r.editedText != null) "_orijinal" else ""
-                        Exports.shareSrt(context, r, r.copy(segments = segs).toSrt(), suf)
+                        if (!Exports.shareSrt(context, r, r.copy(segments = segs).toSrt(), suf)) {
+                            toastLater(context, "Dosya oluşturulamadı (depolama dolu olabilir)")
+                        }
                     }
                 },
             )

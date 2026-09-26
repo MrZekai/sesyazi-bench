@@ -98,6 +98,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleShare(intent: Intent?) {
+        val noteId = intent?.getLongExtra(Notifier.EXTRA_NOTE_ID, -1L) ?: -1L
+        if (noteId > 0) {
+            intent?.removeExtra(Notifier.EXTRA_NOTE_ID)
+            vm.openNoteById(noteId)
+            return
+        }
         if (intent?.action != Intent.ACTION_SEND) return
         val uri: Uri? = if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)

@@ -38,7 +38,7 @@ data class Transcript(
 
     /** Zamanlı altyazı; her zaman orijinal (zaman damgalı) parçalardan üretilir. */
     fun toSrt(): String = buildString {
-        segments.forEachIndexed { i, s ->
+        com.aitolian.sesyazibench.engine.Sentences.mergeOverlappingCues(segments).forEachIndexed { i, s ->
             append(i + 1).append('\n')
             append(srtTime(s.startMs)).append(" --> ").append(srtTime(s.endMs)).append('\n')
             append(s.text).append("\n\n")
@@ -58,6 +58,8 @@ data class RangeWarning(val fromMs: Long, val toMs: Long, val reason: String) {
     companion object {
         /** Aynı satır yeniden başlamış görünüyor ama motor kesinleştirmedi. */
         const val UNCONFIRMED_REPEAT = "UNCONFIRMED_REPEAT"
+        /** Bu aralık iki denemede de yazıya dökülemedi (ağ/kota/hizmet hatası). */
+        const val FAILED = "FAILED"
     }
 }
 

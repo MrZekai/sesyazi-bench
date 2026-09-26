@@ -117,7 +117,7 @@ fun AllNotesScreen(s: MainState, vm: MainViewModel, focusSearch: Boolean = false
         }
         UndoRow(s, vm)
         LazyColumn(
-            Modifier.fillMaxSize(),
+            Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -129,7 +129,7 @@ fun AllNotesScreen(s: MainState, vm: MainViewModel, focusSearch: Boolean = false
             }
         }
         Text(
-            "En fazla ${com.aitolian.sesyazibench.data.HistoryStore.MAX} not saklanır; yenisi gelince en eskisi silinir.",
+            "${s.history.size}/${com.aitolian.sesyazibench.data.HistoryStore.MAX} not. Sınır dolunca yeni not gelince en eskisi silinir; önemli notları dışa aktar.",
             color = SY.Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
         )
     }

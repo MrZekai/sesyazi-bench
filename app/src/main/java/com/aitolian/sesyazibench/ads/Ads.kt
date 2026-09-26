@@ -125,11 +125,10 @@ object Ads {
     }
 
     /**
-     * Döküm başında çağrılır (paylaş → reklam → metin). SDK başlatması ve reklam
-     * yüklemesi soğuk açılışta birkaç saniye sürebilir; toplam en fazla [timeoutMs]
-     * beklenir. [stillWanted]: aynı döküm oturumu sürüyor/yeni bitti ve kullanıcı
-     * iptal etmedi. Metin ekrana gelmiş olsa da oturum aynıysa reklam gösterilir
-     * (kullanıcı kararı: geçiş reklamı her dökümde çıkar); süre dolarsa atlanır.
+     * Döküm başında çağrılır. SDK başlatması ve yükleme soğuk açılışta sürebilir;
+     * toplam en fazla [timeoutMs] beklenir. [stillWanted] false olur olmaz (metin
+     * ekrana geldi, iptal, yeni ses) bırakılır: okunan metnin üstüne sonradan tam
+     * ekran reklam binmez (AdMob geçiş reklamı politikası). Döküm reklamı beklemez.
      */
     suspend fun showWhenReady(activity: ComponentActivity, stillWanted: () -> Boolean, timeoutMs: Long = 5_000) {
         var waited = 0L

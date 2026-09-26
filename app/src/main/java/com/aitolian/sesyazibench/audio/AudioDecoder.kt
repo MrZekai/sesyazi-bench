@@ -51,11 +51,16 @@ object AudioDecoder {
                 format.getLong(MediaFormat.KEY_DURATION) / 1000 > MAX_DURATION_MS
             ) throw DecodeException("Şimdilik en fazla 30 dakikalık ses destekleniyor")
 
-            codec = try {
-                MediaCodec.createDecoderByType(mime).also {
-                    it.configure(format, null, null, 0)
-                    it.start()
-                }
+            val c = try {
+                MediaCodec.createDecoderByType(mime)
+            } catch (t: Throwable) {
+                throw DecodeException("Bu ses biçimi ($mime) telefonunda desteklenmiyor")
+            }
+            // Önce atanır: configure/start hata verirse finally bloğu yine serbest bırakır
+            codec = c
+            try {
+                c.configure(format, null, null, 0)
+                c.start()
             } catch (t: Throwable) {
                 throw DecodeException("Bu ses biçimi ($mime) telefonunda desteklenmiyor")
             }
@@ -82,24 +87,24 @@ object AudioDecoder {
                     throw DecodeException("Ses çözülemedi (çözücü yanıt vermiyor)")
                 }
                 if (!inputDone) {
-                    val inIdx = codec.dequeueInputBuffer(TIMEOUT_US)
+                    val inIdx = c.dequeueInputBuffer(TIMEOUT_US)
                     if (inIdx >= 0) {
-                        val inBuf = codec.getInputBuffer(inIdx)!!
+                        val inBuf = c.getInputBuffer(inIdx)!!
                         val size = extractor.readSampleData(inBuf, 0)
                         lastProgressAt = android.os.SystemClock.elapsedRealtime()
                         if (size < 0) {
-                            codec.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            c.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             inputDone = true
                         } else {
-                            codec.queueInputBuffer(inIdx, 0, size, extractor.sampleTime, 0)
+                            c.queueInputBuffer(inIdx, 0, size, extractor.sampleTime, 0)
                             extractor.advance()
                         }
                     }
                 }
-                val outIdx = codec.dequeueOutputBuffer(info, TIMEOUT_US)
+                val outIdx = c.dequeueOutputBuffer(info, TIMEOUT_US)
                 when {
                     outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        val f = codec.outputFormat
+                        val f = c.outputFormat
                         val newRate = f.intOr(MediaFormat.KEY_SAMPLE_RATE, inRate)
                         channels = f.intOr(MediaFormat.KEY_CHANNEL_COUNT, channels)
                         pcmFloat = f.intOr(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT) ==
@@ -113,14 +118,14 @@ object AudioDecoder {
                         idleAfterEos = 0
                         lastProgressAt = android.os.SystemClock.elapsedRealtime()
                         if (info.size > 0) {
-                            val out = codec.getOutputBuffer(outIdx)!!.order(ByteOrder.nativeOrder())
+                            val out = c.getOutputBuffer(outIdx)!!.order(ByteOrder.nativeOrder())
                             out.position(info.offset); out.limit(info.offset + info.size)
                             resampler.push(downmix.toMono(out, channels, pcmFloat))
                             if (resampler.outputSize.toLong() * 1000 / TARGET_RATE > MAX_DURATION_MS) {
                                 throw DecodeException("Şimdilik en fazla 30 dakikalık ses destekleniyor")
                             }
                         }
-                        codec.releaseOutputBuffer(outIdx, false)
+                        c.releaseOutputBuffer(outIdx, false)
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
                     }
                     inputDone -> if (++idleAfterEos > 300) outputDone = true // bazı çözücüler EOS bayrağı vermez

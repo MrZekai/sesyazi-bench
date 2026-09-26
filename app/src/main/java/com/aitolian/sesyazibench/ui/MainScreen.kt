@@ -45,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -106,6 +107,17 @@ fun MainScreen(
     var handledAd by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(s.adRequest) {
         if (s.adRequest > handledAd) { handledAd = s.adRequest; onProcessingAd() } // döndürmede tekrar gösterme
+    }
+    // Yeni paylaşım / bildirimden not: Ayarlar ya da Notlar açık olsa da okuyucuya dön.
+    // Döndürmede ViewModel yaşar ve sayaç aynı kalır → Ayarlar sebepsiz kapanmaz;
+    // süreç ölümünde sayaç 0'dan başlar, remember da yeniden tohumlanır → yanlış tetik yok.
+    var handledImport by remember { mutableLongStateOf(s.importRequestId) }
+    LaunchedEffect(s.importRequestId) {
+        if (s.importRequestId != handledImport) {
+            handledImport = s.importRequestId
+            showSettings = false
+            notesMode = NOTES_CLOSED
+        }
     }
     LaunchedEffect(s.toast) {
         s.toast?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); vm.toastShown() }
@@ -192,14 +204,16 @@ private fun TopBar(onHome: (() -> Unit)?, onSettings: () -> Unit) {
  */
 @Composable
 private fun Hero(s: MainState, firstUse: Boolean, onWhatsApp: () -> Unit, onFile: () -> Unit) {
+    // Görünen ad tek kaynaktan (res/values/strings.xml → app_name); ad değişince yalnız orası değişir
+    val appName = androidx.compose.ui.res.stringResource(com.aitolian.sesyazibench.R.string.app_name)
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             "Dinleyemiyorsan,\noku.", color = SY.Text, fontSize = 32.sp, lineHeight = 36.sp,
             fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp,
         )
         Text(
-            if (firstUse) "WhatsApp'ta sesli mesaja uzun bas → Paylaş → MuteRead. Metin saniyeler içinde hazır."
-            else "Sesli mesajı MuteRead ile paylaş, saniyeler içinde oku.",
+            if (firstUse) "WhatsApp'ta sesli mesaja uzun bas → Paylaş → $appName. Metin saniyeler içinde hazır."
+            else "Sesli mesajı $appName ile paylaş, saniyeler içinde oku.",
             color = SY.Muted, fontSize = 15.sp, lineHeight = 21.sp,
         )
         Spacer(Modifier.height(4.dp))

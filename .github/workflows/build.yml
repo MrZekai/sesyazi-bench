@@ -81,18 +81,32 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
 
-      # Kendi native kodumuz yok (Whisper kaldırıldı). Kalan .so'lar üçüncü taraf
-      # (ML Kit vb.): 16 KB uyumsuzluğu uyarı olarak raporlanır, Play yüklemede ayrıca denetler.
-      - name: 16 KB hizalama raporu (üçüncü taraf .so)
+      # Yayın kapısı: APK sağlam mı, her .so 16 KB LOAD hizalı mı, APK ZIP 16 KB hizalı mı.
+      # Herhangi biri başarısızsa derleme DURUR (uyarıyla geçmez).
+      - name: 16 KB kapısı (ELF + ZIP hizalama)
         run: |
-          mkdir -p so && unzip -o -q app/build/outputs/apk/release/app-release.apk 'lib/*' -d so 2>/dev/null || true
-          files=$(find so -name '*.so' 2>/dev/null)
-          [ -n "$files" ] || { echo "APK'da native kütüphane yok"; exit 0; }
-          for f in $files; do
-            aligns=$(readelf -lW "$f" 2>/dev/null | awk '$1=="LOAD"{print $NF}')
-            ok=1; for a in $aligns; do [ $((a)) -ge 16384 ] || ok=0; done
-            if [ -n "$aligns" ] && [ $ok -eq 1 ]; then echo "tamam: $f"; else echo "::warning::16 KB hizalı değil: $f"; fi
-          done
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          unzip -tq "$APK"
+          libs=$(unzip -Z1 "$APK" | grep -E '^lib/.+\.so$' || true)
+          bad=0
+          if [ -z "$libs" ]; then
+            echo "APK'da native kütüphane yok"
+          else
+            rm -rf so && mkdir so
+            unzip -o -q "$APK" 'lib/*' -d so
+            while IFS= read -r f; do
+              aligns=$(readelf -lW "so/$f" 2>/dev/null | awk '$1=="LOAD"{print $NF}' || true)
+              [ -n "$aligns" ] || { echo "::error::okunamadı: $f"; bad=1; continue; }
+              ok=1; for a in $aligns; do [ $((a)) -ge 16384 ] || ok=0; done
+              if [ $ok -eq 1 ]; then echo "tamam: $f"; else echo "::error::16 KB hizalı değil: $f"; bad=1; fi
+            done <<< "$libs"
+          fi
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          echo "build-tools: $BT"   # -P 16 için 35+ gerekir
+          ZA="${BT}zipalign"
+          "$ZA" -c -P 16 -v 4 "$APK" > zipalign.log || { tail -20 zipalign.log; echo "::error::APK ZIP 16 KB hizalı değil"; bad=1; }
+          test "$bad" -eq 0
 
       - name: AAB imza denetimi (debug imzası olmamalı)
         run: |
@@ -100,15 +114,20 @@ jobs:
           echo "$owner"
           [ -n "$owner" ] || { echo "HATA: AAB imzası okunamadı"; exit 1; }
           if echo "$owner" | grep -q 'Android Debug'; then echo "HATA: AAB debug anahtarıyla imzalı"; exit 1; fi
+          # Sertifika parmak izi logda: Play Console → Uygulama bütünlüğü → Yükleme anahtarı ile karşılaştır
+          keytool -J-Duser.language=en -printcert -jarfile app/build/outputs/bundle/release/app-release.aab | grep -m1 'SHA256:' 
 
       - name: Rename outputs
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/app-release.apk "out/MuteRead-${GITHUB_RUN_NUMBER}.apk"
-          cp app/build/outputs/bundle/release/app-release.aab "out/MuteRead-${GITHUB_RUN_NUMBER}.aab"
+          cp app/build/outputs/apk/release/app-release.apk "out/app-${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "out/app-${GITHUB_RUN_NUMBER}.aab"
+          # Kaynak ↔ çıktı bağı (kabul testlerinde bu dosya esas alınır)
+          { echo "commit: ${GITHUB_SHA}"; echo "run: ${GITHUB_RUN_NUMBER}"; (cd out && sha256sum app-*.apk app-*.aab); } > out/BUILD-INFO.txt
+          cat out/BUILD-INFO.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MuteRead-${{ github.run_number }}
+          name: app-${{ github.run_number }}
           path: out/*
           retention-days: 30
