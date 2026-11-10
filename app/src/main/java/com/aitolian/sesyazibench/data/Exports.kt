@@ -35,7 +35,7 @@ object Exports {
         val d = File(root, "$now").apply { mkdirs() }
         val safe = t.fileName.substringBeforeLast('.')
             .replace(Regex("[^\\p{L}\\p{N}._ -]"), "_").trim().trim('.').take(48)
-            .ifBlank { "sesyazi" }
+            .ifBlank { "muteread" }
         return File(d, "${safe}_${t.id % 100_000}$suffix.$ext")
     }
 

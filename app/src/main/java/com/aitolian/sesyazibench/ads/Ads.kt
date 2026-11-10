@@ -147,9 +147,6 @@ object Ads {
         showIfAllowed(activity)
     }
 
-    /** Geriye dönük uyumluluk; sayaç artık gösterimde tutuluyor. */
-    fun onTranscriptionDone() {}
-
     /** Tam ekran reklam şu an ekranda mı (aynı anda ikinci gösterim olmasın). */
     @Volatile private var showing = false
     @Volatile private var showingSince = 0L

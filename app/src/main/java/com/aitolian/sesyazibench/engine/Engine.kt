@@ -1,7 +1,5 @@
 package com.aitolian.sesyazibench.engine
 
-import com.aitolian.sesyazibench.audio.DecodedAudio
-
 /**
  * @param approx zaman gerçek ses hizalaması değil, tahmin (ör. Wit belirteç zamanı
  *   vermediğinde parça süresi metin uzunluğuyla bölündü). Eski kayıtlarda false.
@@ -43,9 +41,6 @@ data class EngineResult(
 ) {
     /** Gerçek zaman katsayısı: 0.25 => 60 sn ses 15 sn'de bitti. */
     val rtf: Double get() = if (audioMs > 0) transcribeMs.toDouble() / audioMs else 0.0
-
-    /** Hedef: 60 sn ses ≤ 15 sn  =>  RTF ≤ 0.25 */
-    val passesTarget: Boolean get() = error == null && rtf <= 0.25
 }
 
 /** Uygulamanın desteklediği dil seçenekleri (whisper kodu -> ML Kit locale). */
@@ -68,8 +63,3 @@ enum class Lang(val code: String, val label: String, val mlKitTag: String?) {
 val TRANSLATABLE: List<Lang> = Lang.entries.filter { it != Lang.AUTO }
 
 fun langOf(code: String?): Lang? = Lang.entries.firstOrNull { it.code == code }
-
-interface TranscriptionEngine {
-    val name: String
-    suspend fun transcribe(audio: DecodedAudio, lang: Lang): EngineResult
-}

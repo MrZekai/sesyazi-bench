@@ -20,7 +20,7 @@
         android:largeHeap="true"
         android:theme="@style/Theme.SesYaziBench">
 
-        <!-- AdMob TEST uygulama kimliği (Google örnek ID). Yayın öncesi değişecek. -->
+        <!-- AdMob uygulama kimliği derlemeden gelir (app/build.gradle.kts): secret yoksa Google test kimliği -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${admobAppId}" />

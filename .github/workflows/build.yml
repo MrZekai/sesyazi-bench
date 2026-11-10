@@ -1,9 +1,13 @@
-name: Build benchmark APK
+name: Build MuteRead (APK + AAB)
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+# Derleme yalnız depoyu okur; yazma yetkisi verilmez
+permissions:
+  contents: read
 
 jobs:
   apk:

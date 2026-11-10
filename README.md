@@ -1,7 +1,7 @@
-# Ses → Yazı (Android)
+# MuteRead (Android)
 
-Sesli mesajı, ses dosyasını ya da videonun sesini yazıya döker. Görünen ad henüz kesinleşmedi;
-tek kaynak `app/src/main/res/values/strings.xml` → `app_name`. Paket: `com.aitolian.muteread`
+Sesli mesajı, ses dosyasını ya da videonun sesini yazıya döker. Görünen ad: **MuteRead**
+(tek kaynak `app/src/main/res/values/strings.xml` → `app_name`). Paket: `com.aitolian.muteread`
 (Play'de kayıtlı kimlik; görünen addan bağımsız, toplu değiştirilmez).
 
 ## Mimari (v1.22+)

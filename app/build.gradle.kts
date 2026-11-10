@@ -86,7 +86,8 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2025.06.01")
     implementation(composeBom)
     implementation("androidx.compose.material3:material3")
-    // Tutarlı vektör ikon seti (yayın derlemesinde R8 kullanılmayanları atar)
+    // Tutarlı vektör ikon seti. DİKKAT: isMinifyEnabled = false olduğu için kullanılmayan
+    // ikonlar atılmıyor (paket gereksiz büyür); R8 açılınca atılır.
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")

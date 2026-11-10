@@ -7,3 +7,9 @@ local.properties
 .externalNativeBuild/
 captures/
 .DS_Store
+# İmza anahtarları ve gizli dosyalar depoya girmesin
+*.jks
+*.keystore
+keystore.properties
+*.b64
+
