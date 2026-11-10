@@ -14,8 +14,12 @@ Sesli mesajı, ses dosyasını ya da videonun sesini yazıya döker. Görünen a
   aralık notta `[⚠ …]` + yapılandırılmış uyarı olarak işaretlenir, bölüm bazında yeniden dökülebilir.
 - Dil: kayıtlı tercih → telefon dili → İngilizce. Ana sayfadan ve not menüsünden değiştirilir.
 - Çeviri: Google ML Kit, cihazda.
-- Reklam: AdMob (ana sayfa native, not ekranı banner, döküm başında geçiş reklamı — yalnız ekranda
-  henüz metin yokken; metin gelirse o dökümde reklam atlanır).
+- Reklam: AdMob (ana sayfa native, not ekranı banner; döküm başında tam ekran reklam — yalnız ekranda
+  henüz metin yokken; metin gelirse o dökümde reklam atlanır). Başka uygulamadan paylaşımla gelindiyse
+  uygulama açılış (app open) reklamı, uygulama içinden dosya seçildiyse geçiş reklamı gösterilir
+  (AdMob: uygulama yüklenirken geçiş reklamı yasak).
+- Arayüz dili: kaynak metinler kodda Türkçe; `I18n.kt` tablosu ile İngilizce (`tx("…")`). Yeni dil = yeni tablo.
+- Uygulama içi puanlama: sorunsuz 3., 12. ve 30. dökümden sonra, not kapatılırken (Play In-App Review).
 - Kendi sunucumuz yok. Notlar cihazda (en fazla 50).
 
 ## Derleme

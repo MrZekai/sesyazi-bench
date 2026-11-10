@@ -12,4 +12,6 @@ captures/
 *.keystore
 keystore.properties
 *.b64
+# Yerel hata günlükleri
+hata.txt
 

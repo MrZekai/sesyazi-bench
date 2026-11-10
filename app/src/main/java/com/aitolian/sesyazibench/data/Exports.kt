@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.data
 
+import com.aitolian.sesyazibench.tx
+
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
@@ -18,7 +20,7 @@ object Exports {
 
     /** Düz metin (.txt) — ekranda görünen metin: düzenlenmiş ya da çeviri. */
     fun shareTxt(context: Context, t: Transcript, text: String, suffix: String): Boolean =
-        share(context, fileFor(context, t, suffix, "txt"), text, "text/plain", "Metin dosyasını paylaş")
+        share(context, fileFor(context, t, suffix, "txt"), text, "text/plain", tx("Metin dosyasını paylaş"))
 
     /**
      * Altyazı (.srt) — zaman damgalı parçalardan. Serbest düzenlenmiş metne
@@ -26,7 +28,7 @@ object Exports {
      * ve dosya adında "_orijinal" yazar.
      */
     fun shareSrt(context: Context, t: Transcript, srt: String, suffix: String): Boolean =
-        share(context, fileFor(context, t, suffix, "srt"), srt, "application/x-subrip", "Altyazı dosyasını paylaş")
+        share(context, fileFor(context, t, suffix, "srt"), srt, "application/x-subrip", tx("Altyazı dosyasını paylaş"))
 
     private fun fileFor(c: Context, t: Transcript, suffix: String, ext: String): File {
         val root = dir(c).apply { mkdirs() }

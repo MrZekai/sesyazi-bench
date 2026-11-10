@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.ui
 
+import com.aitolian.sesyazibench.tx
+
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -153,7 +155,7 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
 
     fun startEdit() {
         val cur = s.result ?: return
-        if (working) { vm.toast("Döküm bitince düzenleyebilirsin"); return }
+        if (working) { vm.toast(tx("Döküm bitince düzenleyebilirsin")); return }
         vm.setTab(Tab.TEXT)
         val base = cur.editedText ?: paragraphs(cur.segments).joinToString("\n\n")
         draft = base
@@ -207,7 +209,7 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                     cursorBrush = SolidColor(SY.Accent),
                     modifier = Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
                         .padding(horizontal = READ_PAD, vertical = 12.dp)
-                        .semantics { contentDescription = "Not metni düzenleme alanı" },
+                        .semantics { contentDescription = tx("Not metni düzenleme alanı") },
                 )
                 s.tab == Tab.TRANSLATION -> TranslationBody(s, vm, font, lineMul, translationParas)
                 else -> key(r.id, showTimes) {
@@ -240,8 +242,8 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                         Spacer(Modifier.height(8.dp))
                         Text(
                             processLine(r) +
-                                (if (r.editedText != null) " · düzenlendi" else "") +
-                                (if (showTimes && r.editedText != null) " · zamanlı görünüm düzenlenmemiş metinde kullanılabilir" else ""),
+                                (if (r.editedText != null) tx(" · düzenlendi") else "") +
+                                (if (showTimes && r.editedText != null) tx(" · zamanlı görünüm düzenlenmemiş metinde kullanılabilir") else ""),
                             fontSize = 12.sp, color = SY.Muted, lineHeight = 16.sp,
                         )
                         Spacer(Modifier.height(24.dp))
@@ -257,17 +259,17 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (editing) {
-                    BarButton("Vazgeç", Modifier.weight(1f), filled = false) { leaveEditThen {} }
-                    BarButton("Kaydet", Modifier.weight(1f), filled = true) {
+                    BarButton(tx("Vazgeç"), Modifier.weight(1f), filled = false) { leaveEditThen {} }
+                    BarButton(tx("Kaydet"), Modifier.weight(1f), filled = true) {
                         saveScope.launch { if (vm.saveEdit(draft, draftBase)) editing = false }
                     }
                 } else {
                     // Çeviri sekmesinde çeviri hazır değilken kopyalanacak/paylaşılacak metin yok
                     val ready = !shownText.isNullOrBlank()
-                    BarAction(Icons.Filled.ContentCopy, "Kopyala", Modifier.weight(1f), enabled = ready) {
-                        shownText?.let { copyText(context, it); vm.toast("Kopyalandı") }
+                    BarAction(Icons.Filled.ContentCopy, tx("Kopyala"), Modifier.weight(1f), enabled = ready) {
+                        shownText?.let { copyText(context, it); vm.toast(tx("Kopyalandı")) }
                     }
-                    BarAction(Icons.Filled.Share, "Paylaş", Modifier.weight(1f), enabled = ready) {
+                    BarAction(Icons.Filled.Share, tx("Paylaş"), Modifier.weight(1f), enabled = ready) {
                         shownText?.let { shareText(context, it) }
                     }
                     MoreAction(s, r, Modifier.weight(1f), onEdit = ::startEdit)
@@ -298,8 +300,8 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
         AlertDialog(
             onDismissRequest = { confirmDiscard = null },
             containerColor = SY.Sheet, titleContentColor = SY.Text, textContentColor = SY.Muted,
-            title = { Text("Değişiklikler kaydedilmedi") },
-            text = { Text("Düzenlemeyi kaydetmeden çıkarsan yaptığın değişiklikler kaybolur.") },
+            title = { Text(tx("Değişiklikler kaydedilmedi")) },
+            text = { Text(tx("Düzenlemeyi kaydetmeden çıkarsan yaptığın değişiklikler kaybolur.")) },
             confirmButton = {
                 TextButton(onClick = {
                     saveScope.launch {
@@ -307,11 +309,11 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                         if (vm.saveEdit(draft, draftBase)) { editing = false; next() }
                     }
                 }) {
-                    Text("Kaydet", color = SY.Accent)
+                    Text(tx("Kaydet"), color = SY.Accent)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { editing = false; confirmDiscard = null; next() }) { Text("Kaydetme", color = SY.Error) }
+                TextButton(onClick = { editing = false; confirmDiscard = null; next() }) { Text(tx("Kaydetme"), color = SY.Error) }
             },
         )
     }
@@ -328,35 +330,35 @@ private fun NoteTopBar(
 ) {
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconTap(Icons.AutoMirrored.Filled.ArrowBack, "Ana sayfaya dön", onClick = onHome)
+        IconTap(Icons.AutoMirrored.Filled.ArrowBack, tx("Ana sayfaya dön"), onClick = onHome)
         Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
             Text(
-                r?.let { titleOf(it) } ?: "Yazıya dökülüyor…",
+                r?.let { titleOf(it) } ?: tx("Yazıya dökülüyor…"),
                 color = SY.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             val sub = if (r == null) s.fileName ?: "" else
-                "${langOf(r.language)?.label ?: r.language} · ${Transcript.clock(r.durationMs)} · ${words(r.text)} kelime"
+                tx("{0} · {1} · {2} kelime", langOf(r.language)?.label ?: r.language, Transcript.clock(r.durationMs), words(r.text))
             Text(sub, color = SY.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconTap(Icons.Filled.FormatSize, "Okuma ayarları (yazı boyutu, satır aralığı, tema)", onClick = onReader)
+        IconTap(Icons.Filled.FormatSize, tx("Okuma ayarları (yazı boyutu, satır aralığı, tema)"), onClick = onReader)
         if (r != null) Box {
-            IconTap(Icons.Filled.MoreVert, "Diğer seçenekler") { menu = true }
+            IconTap(Icons.Filled.MoreVert, tx("Diğer seçenekler")) { menu = true }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 if (s.hasAudio && !working) {
                     run {
                         DropdownMenuItem(
-                            text = { Text("⚡ Yeniden dök (${langOf(r.language)?.label ?: r.language})") },
+                            text = { Text(tx("⚡ Yeniden dök ({0})", langOf(r.language)?.label ?: r.language)) },
                             onClick = { menu = false; vm.retranscribe(langOf(r.language)?.takeIf { it in vm.speechLangs } ?: s.lang) },
                         )
                     }
                     vm.speechLangs.filter { it.code != r.language }.forEach { l ->
                         DropdownMenuItem(
-                            text = { Text("Dil: ${l.label} ile yeniden dök") },
+                            text = { Text(tx("Dil: {0} ile yeniden dök", l.label)) },
                             onClick = { menu = false; vm.retranscribeInLanguage(l) },
                         )
                     }
                 }
-                DropdownMenuItem(text = { Text("Bu notu sil", color = SY.Error) }, onClick = { menu = false; onDelete() })
+                DropdownMenuItem(text = { Text(tx("Bu notu sil"), color = SY.Error) }, onClick = { menu = false; onDelete() })
             }
         }
     }
@@ -380,25 +382,25 @@ private fun ReaderSheet(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Okuma ayarları", color = SY.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(tx("Okuma ayarları"), color = SY.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
 
-            SheetLabel("Yazı boyutu")
+            SheetLabel(tx("Yazı boyutu"))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                StepButton("A−", "Yazıyı küçült", enabled = s.readerFont > 14) { vm.setReaderFont(s.readerFont - 1) }
+                StepButton("A−", tx("Yazıyı küçült"), enabled = s.readerFont > 14) { vm.setReaderFont(s.readerFont - 1) }
                 Text(
-                    "Örnek metin · ${s.readerFont}",
+                    tx("Örnek metin · {0}", s.readerFont),
                     color = SY.Text, fontSize = s.readerFont.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
                 )
-                StepButton("A+", "Yazıyı büyüt", enabled = s.readerFont < 30) { vm.setReaderFont(s.readerFont + 1) }
+                StepButton("A+", tx("Yazıyı büyüt"), enabled = s.readerFont < 30) { vm.setReaderFont(s.readerFont + 1) }
             }
 
-            SheetLabel("Satır aralığı")
-            Segmented(listOf("Sıkı", "Normal", "Geniş"), s.readerLine) { vm.setReaderLine(it) }
+            SheetLabel(tx("Satır aralığı"))
+            Segmented(listOf(tx("Sıkı"), tx("Normal"), tx("Geniş")), s.readerLine) { vm.setReaderLine(it) }
 
             if (showTimes != null) {
-                SheetLabel("Görünüm")
-                Segmented(listOf("Paragraf", "Zaman damgalı"), if (showTimes) 1 else 0) { onShowTimes(it == 1) }
+                SheetLabel(tx("Görünüm"))
+                Segmented(listOf(tx("Paragraf"), tx("Zaman damgalı")), if (showTimes) 1 else 0) { onShowTimes(it == 1) }
             }
 
             Row(
@@ -407,8 +409,8 @@ private fun ReaderSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Sesle takip", color = SY.Text, fontSize = 15.sp)
-                    Text("Ses çalarken okunan cümle vurgulanır ve ekran onu izler. Elle kaydırınca takip durur.", color = SY.Muted, fontSize = 12.5.sp)
+                    Text(tx("Sesle takip"), color = SY.Text, fontSize = 15.sp)
+                    Text(tx("Ses çalarken okunan cümle vurgulanır ve ekran onu izler. Elle kaydırınca takip durur."), color = SY.Muted, fontSize = 12.5.sp)
                 }
                 Switch(
                     checked = s.followAudio, onCheckedChange = { vm.setFollowAudio(it) },
@@ -416,8 +418,8 @@ private fun ReaderSheet(
                 )
             }
 
-            SheetLabel("Tema")
-            Segmented(listOf("Sistem", "Açık", "Koyu"), s.themeMode) { vm.setThemeMode(it) }
+            SheetLabel(tx("Tema"))
+            Segmented(listOf(tx("Sistem"), tx("Açık"), tx("Koyu")), s.themeMode) { vm.setThemeMode(it) }
             Spacer(Modifier.navigationBarsPadding())
         }
     }
@@ -462,7 +464,7 @@ private fun LiveBar(percent: Int, onCancel: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(SY.A2))
             Text(
-                if (percent < 0) "Canlı · ⚡ yazıya dökülüyor" else "Canlı · %$percent",
+                if (percent < 0) tx("Canlı · ⚡ yazıya dökülüyor") else tx("Canlı · %{0}", percent),
                 color = SY.Muted, fontSize = 12.5.sp, modifier = Modifier.weight(1f).padding(start = 8.dp),
             )
             CancelText(onCancel)
@@ -477,7 +479,7 @@ private fun CancelText(onCancel: () -> Unit) {
         Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onCancel)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
-    ) { Text("İptal", color = SY.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+    ) { Text(tx("İptal"), color = SY.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
 }
 
 @Composable
@@ -517,19 +519,19 @@ private fun MiniPlayer(s: MainState, vm: MainViewModel) {
         Row(Modifier.fillMaxWidth().padding(end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             IconTap(
                 if (s.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                if (s.playing) "Sesi duraklat" else "Sesi oynat",
+                if (s.playing) tx("Sesi duraklat") else tx("Sesi oynat"),
                 tint = SY.OnAccent, bg = SY.Accent, onClick = vm::togglePlay,
             )
             Waveform(
                 s.waveform, progress,
                 Modifier.weight(1f).height(28.dp).padding(horizontal = 6.dp)
-                    .semantics { contentDescription = "Ses dalgası; dokunduğun yere atlar" },
+                    .semantics { contentDescription = tx("Ses dalgası; dokunduğun yere atlar") },
                 onSeek = { f -> if (s.audioMs > 0) vm.seekTo((f * s.audioMs).toLong()) },
             )
             Text("${Transcript.clock(s.positionMs)} / ${Transcript.clock(s.audioMs)}", fontSize = 12.sp, color = SY.Muted)
             IconTap(
                 if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                if (expanded) "Oynatıcıyı daralt" else "Oynatıcıyı genişlet",
+                if (expanded) tx("Oynatıcıyı daralt") else tx("Oynatıcıyı genişlet"),
                 tint = SY.Muted,
             ) { expanded = !expanded }
         }
@@ -537,7 +539,7 @@ private fun MiniPlayer(s: MainState, vm: MainViewModel) {
             var dragging by remember { mutableStateOf(false) }
             var dragValue by remember { mutableFloatStateOf(0f) }
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                SkipButton("−5 sn", "5 saniye geri") { vm.seekTo(s.positionMs - 5_000) }
+                SkipButton(tx("−5 sn"), tx("5 saniye geri")) { vm.seekTo(s.positionMs - 5_000) }
                 Slider(
                     value = if (dragging) dragValue else progress.coerceIn(0f, 1f),
                     onValueChange = { dragging = true; dragValue = it },
@@ -548,7 +550,7 @@ private fun MiniPlayer(s: MainState, vm: MainViewModel) {
                     colors = SliderDefaults.colors(thumbColor = SY.Accent, activeTrackColor = SY.Accent, inactiveTrackColor = SY.Track),
                     modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
                 )
-                SkipButton("+5 sn", "5 saniye ileri") { vm.seekTo(s.positionMs + 5_000) }
+                SkipButton(tx("+5 sn"), tx("5 saniye ileri")) { vm.seekTo(s.positionMs + 5_000) }
             }
         }
     }
@@ -569,7 +571,7 @@ private fun NoteTabs(tab: Tab, onTab: (Tab) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(CircleShape).background(SY.Card).padding(3.dp),
     ) {
-        listOf(Tab.TEXT to "Metin", Tab.TRANSLATION to "Çeviri").forEach { (t, label) ->
+        listOf(Tab.TEXT to tx("Metin"), Tab.TRANSLATION to tx("Çeviri")).forEach { (t, label) ->
             val sel = t == tab
             Box(
                 Modifier.weight(1f).heightIn(min = 40.dp).clip(CircleShape).background(if (sel) SY.Accent else Color.Transparent)
@@ -607,7 +609,7 @@ private fun LiveText(paras: List<String>, partial: String?, font: Int, lineMul: 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = READ_PAD, vertical = 12.dp)) {
             if (paras.isEmpty() && partial == null) {
-                Text("Metin birazdan burada belirecek…", color = SY.Muted, fontSize = font.sp)
+                Text(tx("Metin birazdan burada belirecek…"), color = SY.Muted, fontSize = font.sp)
             } else {
                 if (paras.isNotEmpty()) PaperText(paras, font, lineMul)
                 // Hızlı modun henüz kesinleşmemiş ara metni: hafif farklı tonda
@@ -620,7 +622,7 @@ private fun LiveText(paras: List<String>, partial: String?, font: Int, lineMul: 
         }
         if (!follow) {
             Pill(
-                "Canlıya dön", bg = SY.Accent, fg = SY.OnAccent, icon = Icons.Filled.ArrowDownward,
+                tx("Canlıya dön"), bg = SY.Accent, fg = SY.OnAccent, icon = Icons.Filled.ArrowDownward,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                 onClick = {
                     follow = true
@@ -707,7 +709,7 @@ private fun AudioFollowPane(
         val backLocal = last[1].takeIf { it >= 0 }
         if (hold && playing && followAudio && back != null) {
             Pill(
-                "Okunan yere dön", bg = SY.Accent, fg = SY.OnAccent, icon = Icons.Filled.ArrowDownward,
+                tx("Okunan yere dön"), bg = SY.Accent, fg = SY.OnAccent, icon = Icons.Filled.ArrowDownward,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                 onClick = {
                     hold = false
@@ -786,7 +788,7 @@ private fun TimedText(
             ) {
                 Box(
                     Modifier.width(60.dp).heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = s.hasAudio, onClickLabel = "Buradan dinle", role = Role.Button) { vm.seekTo(seg.startMs) },
+                        .clickable(enabled = s.hasAudio, onClickLabel = tx("Buradan dinle"), role = Role.Button) { vm.seekTo(seg.startMs) },
                     contentAlignment = Alignment.CenterStart,
                 ) {
                     Text(
@@ -836,25 +838,25 @@ private fun TranslationBody(s: MainState, vm: MainViewModel, font: Int, lineMul:
                 Text(status, color = SY.Muted, fontSize = 13.5.sp, modifier = Modifier.padding(start = 10.dp))
             }
             paras != null -> PaperText(paras, font, lineMul)
-            else -> Pill("Çevir", bg = SY.Accent, fg = SY.OnAccent, onClick = { vm.translate(s.translationTarget) })
+            else -> Pill(tx("Çevir"), bg = SY.Accent, fg = SY.OnAccent, onClick = { vm.translate(s.translationTarget) })
         }
         Spacer(Modifier.height(14.dp))
         // Küçük ikincil seçenek; metnin Google'a gideceği açıkça yazılı
         Row(
             Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(10.dp))
-                .clickable(role = Role.Button, onClickLabel = "Google Çeviri'de aç") {
+                .clickable(role = Role.Button, onClickLabel = tx("Google Çeviri'de aç")) {
                     if (!openGoogleTranslate(context, r.text, r.language, s.translationTarget.code)) {
-                        vm.toast("Metin uzun: panoya kopyalandı, Google Çeviri'ye yapıştır")
+                        vm.toast(tx("Metin uzun: panoya kopyalandı, Google Çeviri'ye yapıştır"))
                     }
                 }
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Google Çeviri'de aç ↗", color = SY.Accent, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+            Text(tx("Google Çeviri'de aç ↗"), color = SY.Accent, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
         }
-        Text("Metin Google'a gönderilir · internet gerekir", color = SY.Muted, fontSize = 12.sp)
+        Text(tx("Metin Google'a gönderilir · internet gerekir"), color = SY.Muted, fontSize = 12.sp)
         Text(
-            "Yukarıdaki çeviri cihazda yapılır; her dil paketi yalnızca ilk seferde indirilir.",
+            tx("Yukarıdaki çeviri cihazda yapılır; her dil paketi yalnızca ilk seferde indirilir."),
             fontSize = 12.sp, color = SY.Muted, modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
     }
@@ -874,17 +876,17 @@ private fun WarningsCard(warnings: List<RangeWarning>, canRetry: Boolean, onRetr
         val failed = warnings.count { it.reason == RangeWarning.FAILED }
         Text(
             when {
-                failed == warnings.size -> if (failed == 1) "⚠ Bir bölüm yazıya dökülemedi" else "⚠ $failed bölüm yazıya dökülemedi"
-                warnings.size == 1 -> "⚠ Bir bölüm tam doğrulanamadı"
-                else -> "⚠ ${warnings.size} bölümde sorun var"
+                failed == warnings.size -> if (failed == 1) tx("⚠ Bir bölüm yazıya dökülemedi") else tx("⚠ {0} bölüm yazıya dökülemedi", failed)
+                warnings.size == 1 -> tx("⚠ Bir bölüm tam doğrulanamadı")
+                else -> tx("⚠ {0} bölümde sorun var", warnings.size)
             },
             fontSize = 14.sp, color = SY.Text, fontWeight = FontWeight.Medium,
         )
         Text(
             when {
-                failed == warnings.size -> "Bağlantı ya da hizmet hatası nedeniyle bu aralık metinde yok."
-                failed == 0 -> "Bu aralıkta bir satır yeniden başlamış görünüyor ama kesinleşmedi; metin eksik olabilir."
-                else -> "Bazı aralıklar yazıya dökülemedi, bazıları kesinleşmedi; metin eksik olabilir."
+                failed == warnings.size -> tx("Bağlantı ya da hizmet hatası nedeniyle bu aralık metinde yok.")
+                failed == 0 -> tx("Bu aralıkta bir satır yeniden başlamış görünüyor ama kesinleşmedi; metin eksik olabilir.")
+                else -> tx("Bazı aralıklar yazıya dökülemedi, bazıları kesinleşmedi; metin eksik olabilir.")
             },
             fontSize = 12.5.sp, color = SY.Muted, lineHeight = 17.sp,
         )
@@ -894,7 +896,7 @@ private fun WarningsCard(warnings: List<RangeWarning>, canRetry: Boolean, onRetr
                     "${Transcript.clock(w.fromMs)}–${Transcript.clock(w.toMs)}",
                     fontSize = 13.sp, color = SY.Text, modifier = Modifier.weight(1f),
                 )
-                if (canRetry) Pill("Bu bölümü yeniden dök", bg = SY.Accent, fg = SY.OnAccent, onClick = { onRetry(w) })
+                if (canRetry) Pill(tx("Bu bölümü yeniden dök"), bg = SY.Accent, fg = SY.OnAccent, onClick = { onRetry(w) })
             }
         }
     }
@@ -910,38 +912,38 @@ private fun MoreAction(s: MainState, r: Transcript, modifier: Modifier, onEdit: 
     val context = LocalContext.current
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
-        BarAction(Icons.Filled.MoreHoriz, "Diğer", Modifier.fillMaxWidth()) { open = true }
+        BarAction(Icons.Filled.MoreHoriz, tx("Diğer"), Modifier.fillMaxWidth()) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Metni düzenle") }, onClick = { open = false; onEdit() })
+            DropdownMenuItem(text = { Text(tx("Metni düzenle")) }, onClick = { open = false; onEdit() })
             val tr = s.tab == Tab.TRANSLATION
             val suffix = if (tr) "_${s.translationTarget.code}" else ""
             DropdownMenuItem(
-                text = { Text(if (tr) "Çeviriyi dosya olarak paylaş (.txt)" else "Metin dosyası olarak paylaş (.txt)") },
+                text = { Text(if (tr) tx("Çeviriyi dosya olarak paylaş (.txt)") else tx("Metin dosyası olarak paylaş (.txt)")) },
                 onClick = {
                     open = false
                     val text = if (tr) s.translation?.let { paragraphs(it).joinToString("\n\n") } else r.editedText ?: paragraphs(r.segments).joinToString("\n\n")
-                    if (text == null) toastLater(context, "Çeviri henüz hazır değil")
-                    else if (!Exports.shareTxt(context, r, text, suffix)) toastLater(context, "Dosya oluşturulamadı (depolama dolu olabilir)")
+                    if (text == null) toastLater(context, tx("Çeviri henüz hazır değil"))
+                    else if (!Exports.shareTxt(context, r, text, suffix)) toastLater(context, tx("Dosya oluşturulamadı (depolama dolu olabilir)"))
                 },
             )
             DropdownMenuItem(
                 text = {
                     Text(
                         when {
-                            tr -> "Çeviri altyazısı (.srt)"
-                            r.editedText != null -> "Altyazı (.srt) · orijinal döküm"
-                            else -> "Altyazı (.srt)"
+                            tr -> tx("Çeviri altyazısı (.srt)")
+                            r.editedText != null -> tx("Altyazı (.srt) · orijinal döküm")
+                            else -> tx("Altyazı (.srt)")
                         },
                     )
                 },
                 onClick = {
                     open = false
                     val segs = if (tr) s.translation else r.segments
-                    if (segs == null) toastLater(context, "Çeviri henüz hazır değil")
+                    if (segs == null) toastLater(context, tx("Çeviri henüz hazır değil"))
                     else {
                         val suf = suffix + if (!tr && r.editedText != null) "_orijinal" else ""
                         if (!Exports.shareSrt(context, r, r.copy(segments = segs).toSrt(), suf)) {
-                            toastLater(context, "Dosya oluşturulamadı (depolama dolu olabilir)")
+                            toastLater(context, tx("Dosya oluşturulamadı (depolama dolu olabilir)"))
                         }
                     }
                 },
@@ -990,13 +992,13 @@ private fun BarButton(label: String, modifier: Modifier, filled: Boolean, onClic
 
 /** Süre satırı: dökümün kaç saniyede bittiği (hız, uygulamanın ana vaadi). */
 private fun processLine(r: Transcript): String {
-    val tr = Locale("tr")
-    fun sec(ms: Long) = "%.1f".format(tr, ms / 1000.0)
+    val loc = Locale.getDefault()
+    fun sec(ms: Long) = "%.1f".format(loc, ms / 1000.0)
     val marked = r.segments.any { it.text.startsWith("[⚠") }
     return when {
-        r.processMs <= 0L -> "✓ Yazıya döküldü"
-        marked -> "✓ ⚡ ${sec(r.processMs)} sn · bazı bölümler yazıya dökülemedi"
-        else -> "✓ ⚡ ${sec(r.processMs)} sn'de yazıya döküldü"
+        r.processMs <= 0L -> tx("✓ Yazıya döküldü")
+        marked -> tx("✓ ⚡ {0} sn · bazı bölümler yazıya dökülemedi", sec(r.processMs))
+        else -> tx("✓ ⚡ {0} sn'de yazıya döküldü", sec(r.processMs))
     }
 }
 
@@ -1007,7 +1009,7 @@ internal fun titleOf(t: Transcript): String {
 }
 
 internal fun noteDate(t: Transcript): String =
-    SimpleDateFormat("d MMM HH:mm", Locale("tr")).format(Date(t.id))
+    SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date(t.id))
 
 private fun words(t: String) = t.split(Regex("\\s+")).count { it.isNotBlank() }
 

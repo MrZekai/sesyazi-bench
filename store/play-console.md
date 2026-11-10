@@ -46,6 +46,10 @@ AdMob için resmi rehber: https://developers.google.com/admob/android/privacy/pl
 
 Her yeni yüklemede `versionCode` = CI çalıştırma numarası (otomatik artar).
 
+Gerçek reklam kimlikleri (GitHub → Settings → Secrets → Actions): `ADMOB_APP_ID`, `ADMOB_BANNER_ID`, `ADMOB_INTERSTITIAL_ID`, `ADMOB_NATIVE_ID`, `ADMOB_APP_OPEN_ID` (v1.24: AdMob'da "Uygulama açılış" reklam birimi aç). Secret yoksa test kimlikleri kullanılır.
+
+v1.24'ten itibaren yayın paketi R8 ile küçültülür: yüklemeden önce CI APK'sını telefonda dene (paylaş → metin, çeviri, reklam, dışa aktarma).
+
 ## 4. Mağaza görselleri (gerçek ekranlardan, TR ve EN)
 
 1. "Dinleyemiyorsan, oku." — büyük, okunur bir transkript.

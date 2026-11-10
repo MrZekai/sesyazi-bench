@@ -30,7 +30,7 @@ object Notifier {
         val nm = c.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Döküm tamamlandı", NotificationManager.IMPORTANCE_DEFAULT),
+                NotificationChannel(CHANNEL, tx("Döküm tamamlandı"), NotificationManager.IMPORTANCE_DEFAULT),
             )
         }
         val open = PendingIntent.getActivity(
@@ -42,8 +42,8 @@ object Notifier {
         )
         val n = NotificationCompat.Builder(c, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_fg)
-            .setContentTitle("Metnin hazır")
-            .setContentText("Açmak için dokun")
+            .setContentTitle(tx("Metnin hazır"))
+            .setContentText(tx("Açmak için dokun"))
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(open)
             .setAutoCancel(true)

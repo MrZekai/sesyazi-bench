@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.ui
 
+import com.aitolian.sesyazibench.tx
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -154,5 +156,5 @@ internal fun copyText(context: Context, text: String) {
 
 internal fun shareText(context: Context, text: String) {
     val i = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }
-    context.startActivity(Intent.createChooser(i, "Paylaş"))
+    context.startActivity(Intent.createChooser(i, tx("Paylaş")))
 }

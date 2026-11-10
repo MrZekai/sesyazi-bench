@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.ads
 
+import com.aitolian.sesyazibench.tx
+
 import android.content.Context
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -128,7 +130,7 @@ private class NativeViews(context: Context) {
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), res.displayMetrics).toInt()
 
     private val badge = TextView(context).apply {
-        text = "Reklam"
+        text = tx("Reklam")
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
         setPadding(dp(6), dp(1), dp(6), dp(1))
     }

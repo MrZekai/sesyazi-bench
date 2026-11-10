@@ -42,6 +42,7 @@ android {
     val testBanner = "ca-app-pub-3940256099942544/9214589741"
     val testInterstitial = "ca-app-pub-3940256099942544/1033173712"
     val testNative = "ca-app-pub-3940256099942544/2247696110"
+    val testAppOpen = "ca-app-pub-3940256099942544/9257395921"
     fun env(name: String, fallback: String) = System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() } ?: fallback
     fun q(v: String) = "\"" + v.replace("\\", "").replace("\"", "") + "\""
 
@@ -51,15 +52,20 @@ android {
             buildConfigField("String", "ADMOB_BANNER", q(testBanner))
             buildConfigField("String", "ADMOB_INTERSTITIAL", q(testInterstitial))
             buildConfigField("String", "ADMOB_NATIVE", q(testNative))
+            buildConfigField("String", "ADMOB_APP_OPEN", q(testAppOpen))
             buildConfigField("String", "ADMOB_TEST_DEVICES", q(""))
         }
         release {
-            isMinifyEnabled = false
+            // R8: kullanılmayan kod ve kaynaklar atılır (paket küçülür). Kurallar: proguard-rules.pro
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (uploadStore != null) signingConfigs.getByName("upload") else signingConfigs.getByName("debug")
             manifestPlaceholders["admobAppId"] = env("ADMOB_APP_ID", testApp)
             buildConfigField("String", "ADMOB_BANNER", q(env("ADMOB_BANNER_ID", testBanner)))
             buildConfigField("String", "ADMOB_INTERSTITIAL", q(env("ADMOB_INTERSTITIAL_ID", testInterstitial)))
             buildConfigField("String", "ADMOB_NATIVE", q(env("ADMOB_NATIVE_ID", testNative)))
+            buildConfigField("String", "ADMOB_APP_OPEN", q(env("ADMOB_APP_OPEN_ID", testAppOpen)))
             // Kendi test telefonlarında gerçek reklama tıklamamak için (virgülle ayrılmış cihaz kimlikleri)
             buildConfigField("String", "ADMOB_TEST_DEVICES", q(env("ADMOB_TEST_DEVICE_IDS", "")))
         }
@@ -86,8 +92,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2025.06.01")
     implementation(composeBom)
     implementation("androidx.compose.material3:material3")
-    // Tutarlı vektör ikon seti. DİKKAT: isMinifyEnabled = false olduğu için kullanılmayan
-    // ikonlar atılmıyor (paket gereksiz büyür); R8 açılınca atılır.
+    // Tutarlı vektör ikon seti (yayın derlemesinde R8 kullanılmayanları atar)
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")
@@ -108,5 +113,8 @@ dependencies {
     // AdMob + UMP rıza formu (şimdilik yalnızca test reklam ID'leri)
     implementation("com.google.android.gms:play-services-ads:24.4.0")
     implementation("com.google.android.ump:user-messaging-platform:3.2.0")
+
+    // Uygulama içi puanlama (Play In-App Review)
+    implementation("com.google.android.play:review:2.0.2")
 
 }

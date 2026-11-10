@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.engine
 
+import com.aitolian.sesyazibench.tx
+
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
 import com.google.mlkit.nl.translate.TranslateLanguage
@@ -49,19 +51,19 @@ object OnDeviceTranslator {
         target: Lang,
         onStatus: (String) -> Unit,
     ): List<Segment> {
-        val src = TranslateLanguage.fromLanguageTag(source.code) ?: error("${source.label} çeviri için desteklenmiyor")
-        val tgt = TranslateLanguage.fromLanguageTag(target.code) ?: error("${target.label} çeviri için desteklenmiyor")
+        val src = TranslateLanguage.fromLanguageTag(source.code) ?: error(tx("{0} çeviri için desteklenmiyor", source.label))
+        val tgt = TranslateLanguage.fromLanguageTag(target.code) ?: error(tx("{0} çeviri için desteklenmiyor", target.label))
         val translator = Translation.getClient(
             TranslatorOptions.Builder().setSourceLanguage(src).setTargetLanguage(tgt).build(),
         )
         try {
             if (!isDownloaded(source) || !isDownloaded(target)) {
-                onStatus("Dil paketi indiriliyor (tek seferlik, ~30 MB)…")
+                onStatus(tx("Dil paketi indiriliyor (tek seferlik, ~30 MB)…"))
             }
             translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
             val sentences = toSentences(segments)
             return sentences.mapIndexed { i, s ->
-                onStatus("Çevriliyor ${i + 1}/${sentences.size}…")
+                onStatus(tx("Çevriliyor {0}/{1}…", i + 1, sentences.size))
                 Segment(s.startMs, s.endMs, translator.translate(s.text).await(), approx = s.approx)
             }
         } finally {

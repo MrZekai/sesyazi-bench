@@ -99,6 +99,8 @@ data class MainState(
     val themeMode: Int = 1,
     /** Her yeni paylaşım/dosya seçiminde artar: ekran Ayarlar/Notlar'dan okuyucuya döner. */
     val importRequestId: Long = 0,
+    /** Artınca etkinlik uygulama içi puanlama penceresini ister (tek seferlik olay sayacı). */
+    val reviewRequest: Int = 0,
 )
 
 /** Wit.ai ile üretilen notların kalite etiketi. */
@@ -264,8 +266,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // Yeni ses
     // ------------------------------------------------------------------
 
-    /** Ses seçildi / paylaşıldı → kopyala, çöz, hemen Wit ile yazıya dök. Önceki her işi iptal eder. */
-    fun onAudio(uri: Uri) {
+    /**
+     * Son döküm başka uygulamadan (Paylaş / Birlikte aç) mı başladı? Öyleyse uygulama
+     * o an açılıyor ya da öne geliyor demektir: AdMob kuralı gereği geçiş reklamı değil
+     * uygulama açılış (app open) reklamı gösterilir.
+     */
+    @Volatile var adAtAppOpen = false
+        private set
+
+    /** Başka uygulamadan paylaşılan / "Birlikte aç" ile gelen ses. */
+    fun onSharedAudio(uri: Uri) = startAudio(uri, shared = true)
+
+    /** Uygulama içinden (dosya seçici) seçilen ses. */
+    fun onAudio(uri: Uri) = startAudio(uri, shared = false)
+
+    /** Kopyala, çöz, hemen Wit ile yazıya dök. Önceki her işi iptal eder. */
+    private fun startAudio(uri: Uri, shared: Boolean) {
+        adAtAppOpen = shared
         val s = newSession()
         translateJob?.cancel()
         stopPlayback()
@@ -273,7 +290,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         player.setSource(null)
         _state.update {
             it.copy(
-                phase = Phase.Preparing("Ses hazırlanıyor…"), result = null, previousResult = null,
+                phase = Phase.Preparing(tx("Ses hazırlanıyor…")), result = null, previousResult = null,
                 fileName = null, audioMs = 0, waveform = FloatArray(0), hasAudio = false, positionMs = 0,
                 live = emptyList(), livePartial = null, tab = Tab.TEXT, translation = null, translating = null,
                 refining = null, importRequestId = it.importRequestId + 1,
@@ -285,7 +302,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val name = withContext(Dispatchers.IO) { displayName(uri) }
                 val copy = withContext(Dispatchers.IO) { copyToCache(uri, name, s) }
-                    ?: throw DecodeException("Dosya çok büyük (en fazla $MAX_FILE_MB MB)")
+                    ?: throw DecodeException(tx("Dosya çok büyük (en fazla {0} MB)", MAX_FILE_MB))
                 var decoded = withContext(Dispatchers.IO) {
                     AudioDecoder.decode(ctx, Uri.fromFile(copy), { !s.alive() })
                 }
@@ -297,7 +314,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 if (decoded.samples.size < AudioDecoder.TARGET_RATE / 2) {
-                    throw DecodeException("Ses çok kısa (en az yarım saniye olmalı)")
+                    throw DecodeException(tx("Ses çok kısa (en az yarım saniye olmalı)"))
                 }
                 val wave = withContext(Dispatchers.Default) { decoded.peaks() }
                 if (!s.alive()) return@launch
@@ -318,13 +335,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 throw t
             } catch (t: DecodeException) {
                 dropOwnCopy(s)
-                s.update { it.copy(phase = Phase.Failed(t.message ?: "Ses açılamadı")) }
+                s.update { it.copy(phase = Phase.Failed(t.message ?: tx("Ses açılamadı"))) }
             } catch (t: OutOfMemoryError) {
                 dropOwnCopy(s)
-                s.update { it.copy(phase = Phase.Failed("Dosya bu telefon için çok büyük")) }
+                s.update { it.copy(phase = Phase.Failed(tx("Dosya bu telefon için çok büyük"))) }
             } catch (t: Throwable) {
                 dropOwnCopy(s)
-                s.update { it.copy(phase = Phase.Failed("Ses açılamadı: ${t.message ?: t.javaClass.simpleName}")) }
+                s.update { it.copy(phase = Phase.Failed(tx("Ses açılamadı: {0}", t.message ?: t.javaClass.simpleName))) }
             }
         }
     }
@@ -339,15 +356,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun retranscribe(lang: Lang = state.value.lang) {
         val a = audio ?: run {
             _state.update { it.copy(lang = lang) }
-            if (state.value.result != null) toast("Bu notun sesi artık yok; sesi yeniden paylaşman gerekiyor")
+            if (state.value.result != null) toast(tx("Bu notun sesi artık yok; sesi yeniden paylaşman gerekiyor"))
             return
         }
         val s = newSession()
+        adAtAppOpen = false // uygulama içi geçiş: normal geçiş reklamı
         translateJob?.cancel()
         _state.update {
             it.copy(
                 previousResult = it.result ?: it.previousResult, result = null, live = emptyList(), livePartial = null,
-                phase = Phase.Preparing("Hazırlanıyor…"), tab = Tab.TEXT, translation = null, translating = null,
+                phase = Phase.Preparing(tx("Hazırlanıyor…")), tab = Tab.TEXT, translation = null, translating = null,
                 refining = null, lang = lang,
             )
         }
@@ -357,7 +375,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } catch (t: CancellationException) {
                 throw t
             } catch (t: Throwable) {
-                fail(s, "Yazıya dökülemedi: ${t.message ?: t.javaClass.simpleName}")
+                fail(s, tx("Yazıya dökülemedi: {0}", t.message ?: t.javaClass.simpleName))
             }
         }
     }
@@ -401,11 +419,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Hata kodundan anlaşılır mesaj. */
     private fun messageFor(code: String?, langLabel: String): String = when (code) {
-        WitEngine.ERR_NETWORK, WitEngine.ERR_TIMEOUT -> "İnternet bağlantısı zayıf ya da yok. Bağlantını kontrol edip tekrar dene."
-        WitEngine.ERR_RATE -> "Hizmet şu an yoğun. Birkaç saniye sonra tekrar dene."
-        WitEngine.ERR_AUTH -> "$langLabel için yazıya dökme hizmetine şu an ulaşılamıyor. Uygulamayı güncelleyip tekrar dene."
-        WitEngine.ERR_SERVER, WitEngine.ERR_SERVICE -> "Yazıya dökme hizmeti şu an yanıt vermiyor. Biraz sonra tekrar dene."
-        else -> "Yazıya dökülemedi. Tekrar dene."
+        WitEngine.ERR_NETWORK, WitEngine.ERR_TIMEOUT -> tx("İnternet bağlantısı zayıf ya da yok. Bağlantını kontrol edip tekrar dene.")
+        WitEngine.ERR_RATE -> tx("Hizmet şu an yoğun. Birkaç saniye sonra tekrar dene.")
+        WitEngine.ERR_AUTH -> tx("{0} için yazıya dökme hizmetine şu an ulaşılamıyor. Uygulamayı güncelleyip tekrar dene.", langLabel)
+        WitEngine.ERR_SERVER, WitEngine.ERR_SERVICE -> tx("Yazıya dökme hizmeti şu an yanıt vermiyor. Biraz sonra tekrar dene.")
+        else -> tx("Yazıya dökülemedi. Tekrar dene.")
     }
 
     /**
@@ -418,8 +436,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val importMs = processingStartedAt - s.startedAt
         val lang = langSel.code
         val label = langSel.label
-        if (!online()) { fail(s, "İnternet bağlantısı gerekiyor. Bağlanıp tekrar dene."); return }
-        val wit = WitEngine.forLang(lang) ?: run { fail(s, "$label için yazıya dökme şu an desteklenmiyor. Konuşma dilini değiştir."); return }
+        if (!online()) { fail(s, tx("İnternet bağlantısı gerekiyor. Bağlanıp tekrar dene.")); return }
+        val wit = WitEngine.forLang(lang) ?: run { fail(s, tx("{0} için yazıya dökme şu an desteklenmiyor. Konuşma dilini değiştir.", label)); return }
 
         s.update { it.copy(phase = Phase.Transcribing(-1), live = emptyList(), livePartial = null, refining = null) }
         requestAd(s)
@@ -469,7 +487,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     mixed = true
                     fills[f.from] = "işaretlendi (${again?.failed?.firstOrNull()?.code ?: again?.result?.error ?: f.code})"
-                    segs = segs + Segment(fromMs, toMs, "[⚠ ${Transcript.clock(fromMs)}–${Transcript.clock(toMs)} arası yazıya dökülemedi]")
+                    segs = segs + Segment(fromMs, toMs, tx("[⚠ {0}–{1} arası yazıya dökülemedi]", Transcript.clock(fromMs), Transcript.clock(toMs)))
                     warnings += RangeWarning(fromMs, toMs, RangeWarning.FAILED)
                 }
             }
@@ -482,7 +500,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (segs.isEmpty()) {
             logTiming(s, r, importMs, 0, 0, processingStartedAt)
-            fail(s, "Konuşma algılanamadı. Konuşma dili $label mi? Değilse dili değiştirip tekrar dene.")
+            fail(s, tx("Konuşma algılanamadı. Konuşma dili {0} mi? Değilse dili değiştirip tekrar dene.", label))
             return
         }
         val t = Transcript(
@@ -506,9 +524,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Ölçüm: kurtarma turu ve kayıt dahil, en sonda (QA-12)
         logTiming(s, r, importMs, segs.size, warnings.size, processingStartedAt)
         val note = when {
-            h == null -> "Metin hazır ama telefona kaydedilemedi (depolama dolu olabilir)"
-            mixed -> "Bazı bölümler yazıya dökülemedi; notta işaretlendi"
-            t.warnings.isNotEmpty() -> "Bir bölüm tam doğrulanamadı; notun altında işaretlendi"
+            h == null -> tx("Metin hazır ama telefona kaydedilemedi (depolama dolu olabilir)")
+            mixed -> tx("Bazı bölümler yazıya dökülemedi; notta işaretlendi")
+            t.warnings.isNotEmpty() -> tx("Bir bölüm tam doğrulanamadı; notun altında işaretlendi")
             else -> null
         }
         s.update {
@@ -520,6 +538,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         Notifier.notifyDone(ctx, t.id)
+        // Sorunsuz biten 3., 12. ve 30. dökümden sonra, kullanıcı notu kapatırken puan istenir
+        if (h != null && note == null) {
+            val n = prefs.okCount + 1
+            prefs.okCount = n
+            if (n == 3 || n == 12 || n == 30) reviewPending = true
+        }
+    }
+
+    /** Puanlama isteği bekliyor mu (not kapatılınca gösterilir; okurken araya girmez). */
+    @Volatile private var reviewPending = false
+
+    /** Not ekranından ana sayfaya dönüş (kullanıcı eylemi). */
+    fun closeNote() {
+        goHome()
+        if (reviewPending) {
+            reviewPending = false
+            _state.update { it.copy(reviewRequest = it.reviewRequest + 1) }
+        }
     }
 
     /**
@@ -529,18 +565,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * olursa eski metin aynen korunur.
      */
     fun retryWarning(w: RangeWarning) {
-        val a = audio ?: run { toast("Bu notun sesi artık yok; sesi yeniden paylaşman gerekiyor"); return }
+        val a = audio ?: run { toast(tx("Bu notun sesi artık yok; sesi yeniden paylaşman gerekiyor")); return }
         val cur = state.value.result ?: return
-        if (cur.editedText != null) { toast("Düzenlenmiş notta bölüm yeniden dökülemez"); return }
-        if (isWorking) { toast("Önce mevcut işlem bitsin"); return }
-        val wit = WitEngine.forLang(cur.language) ?: run { toast("Bu dil için hızlı mod yok"); return }
-        if (!online()) { toast("Bunun için internet bağlantısı gerekiyor"); return }
+        if (cur.editedText != null) { toast(tx("Düzenlenmiş notta bölüm yeniden dökülemez")); return }
+        if (isWorking) { toast(tx("Önce mevcut işlem bitsin")); return }
+        val wit = WitEngine.forLang(cur.language) ?: run { toast(tx("Bu dil için hızlı mod yok")); return }
+        if (!online()) { toast(tx("Bunun için internet bağlantısı gerekiyor")); return }
         val s = newSession()
         translateJob?.cancel()
         _state.update {
             it.copy(
                 tab = Tab.TEXT, translation = null, translating = null,
-                refining = "Bölüm yeniden dökülüyor (${Transcript.clock(w.fromMs)}–${Transcript.clock(w.toMs)})…",
+                refining = tx("Bölüm yeniden dökülüyor ({0}–{1})…", Transcript.clock(w.fromMs), Transcript.clock(w.toMs)),
             )
         }
         s.job = viewModelScope.launch {
@@ -555,7 +591,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 if (oc.result.error != null || oc.failed.isNotEmpty() || fresh.isEmpty()) {
-                    s.update { it.copy(refining = null, toast = "Bölüm yeniden dökülemedi; mevcut metin korundu") }
+                    s.update { it.copy(refining = null, toast = tx("Bölüm yeniden dökülemedi; mevcut metin korundu")) }
                     return@launch
                 }
                 val stillUncertain = oc.uncertain.isNotEmpty()
@@ -581,13 +617,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 s.update {
                     if (it.result?.id == nt.id) it.copy(
                         result = nt, history = h, refining = null,
-                        toast = if (stillUncertain) "Yeniden döküldü ama bölüm yine tam doğrulanamadı" else "Bölüm yeniden döküldü",
+                        toast = if (stillUncertain) tx("Yeniden döküldü ama bölüm yine tam doğrulanamadı") else tx("Bölüm yeniden döküldü"),
                     ) else it.copy(history = h, refining = null)
                 }
             } catch (t: CancellationException) {
                 throw t
             } catch (t: Throwable) {
-                s.update { it.copy(refining = null, toast = "Bölüm yeniden dökülemedi; mevcut metin korundu") }
+                s.update { it.copy(refining = null, toast = tx("Bölüm yeniden dökülemedi; mevcut metin korundu")) }
             }
         }
     }
@@ -595,7 +631,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // --- Geliştirici ---
     fun disableDevMode() {
         prefs.devMode = false
-        toast("Geliştirici modu kapatıldı")
+        toast(tx("Geliştirici modu kapatıldı"))
     }
 
     // ------------------------------------------------------------------
@@ -611,7 +647,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun saveEdit(text: String, base: String): Boolean {
         val r = state.value.result ?: return true
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) { toast("Boş metin kaydedilemez. Notu silmek için menüyü kullan."); return false }
+        if (trimmed.isEmpty()) { toast(tx("Boş metin kaydedilemez. Notu silmek için menüyü kullan.")); return false }
         if (trimmed == base.trim()) return true
         // Ham dökümle (boşluk farkı hariç) aynıysa düzenleme kaldırılır; değilse metin AYNEN (paragraflarıyla) saklanır
         val norm = { x: String -> x.replace(Regex("\\s+"), " ").trim() }
@@ -619,17 +655,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         translateJob?.cancel()
         return try {
             val upd = HistoryStore.update(ctx, r.id) { it.copy(editedText = edited, revision = it.revision + 1) }
-            if (upd == null) { toast("Bu not silinmiş"); return true }
+            if (upd == null) { toast(tx("Bu not silinmiş")); return true }
             val (h, nt) = upd
             _state.update {
-                if (it.result?.id == nt.id) it.copy(result = nt, history = h, translation = null, translating = null, toast = "Kaydedildi")
+                if (it.result?.id == nt.id) it.copy(result = nt, history = h, translation = null, translating = null, toast = tx("Kaydedildi"))
                 else it.copy(history = h)
             }
             true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            toast("Kaydedilemedi (depolama dolu olabilir). Taslağın açık.")
+            toast(tx("Kaydedilemedi (depolama dolu olabilir). Taslağın açık."))
             false
         }
     }
@@ -673,7 +709,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openHistory(t: Transcript) {
         val s = state.value
-        if (isWorking && s.refining == null) { toast("Önce mevcut işlem bitsin ya da iptal et"); return }
+        if (isWorking && s.refining == null) { toast(tx("Önce mevcut işlem bitsin ya da iptal et")); return }
         clearForNew()
         _state.update {
             it.copy(
@@ -704,7 +740,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteHistory(t: Transcript) {
         viewModelScope.launch {
             val h = try { HistoryStore.remove(ctx, t.id) } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                toast("Not silinemedi (depolama hatası)"); return@launch
+                toast(tx("Not silinemedi (depolama hatası)")); return@launch
             }
             _state.update { it.copy(history = h, undoDeleted = t) }
             // Geri al süresi ekrandan bağımsız: Ayarlar'a gidip dönmek süreyi uzatmaz
@@ -721,7 +757,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         undoJob?.cancel()
         viewModelScope.launch {
             val h = try { HistoryStore.restore(ctx, t) } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                toast("Geri alınamadı (depolama hatası)"); return@launch
+                toast(tx("Geri alınamadı (depolama hatası)")); return@launch
             }
             _state.update { it.copy(history = h, undoDeleted = null) }
         }
@@ -733,7 +769,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         undoJob?.cancel()
         viewModelScope.launch {
             try { HistoryStore.clear(ctx) } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                toast("Notlar silinemedi (depolama hatası)"); return@launch
+                toast(tx("Notlar silinemedi (depolama hatası)")); return@launch
             }
             withContext(Dispatchers.IO) {
                 Exports.clear(ctx)
@@ -743,7 +779,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     ?.forEach { it.delete() }
             }
             _state.update {
-                it.copy(history = emptyList(), undoDeleted = null, lastTiming = null, lastDiag = null, toast = "Uygulamadaki tüm notlar ve dosyalar silindi")
+                it.copy(history = emptyList(), undoDeleted = null, lastTiming = null, lastDiag = null, toast = tx("Uygulamadaki tüm notlar ve dosyalar silindi"))
             }
         }
     }
@@ -769,15 +805,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val gen = ++translationGeneration
         translateJob?.cancel()
         val r = state.value.result ?: return
-        val source = langOf(r.language) ?: run { toast("Kaynak dil tanınmadı"); return }
+        val source = langOf(r.language) ?: run { toast(tx("Kaynak dil tanınmadı")); return }
         // Kullanıcı metni düzelttiyse düzeltilmiş metin çevrilir
         val input = r.editedText?.let { listOf(Segment(0, r.durationMs, it)) } ?: r.segments
         if (source == target) {
             _state.update { it.copy(translationTarget = target, translation = input, translating = null) }
             return
         }
-        if (!OnDeviceTranslator.supports(source)) { toast("${source.label} için çeviri desteklenmiyor"); return }
-        _state.update { it.copy(translationTarget = target, translation = null, translating = "Hazırlanıyor…") }
+        if (!OnDeviceTranslator.supports(source)) { toast(tx("{0} için çeviri desteklenmiyor", source.label)); return }
+        _state.update { it.copy(translationTarget = target, translation = null, translating = tx("Hazırlanıyor…")) }
         translateJob = viewModelScope.launch {
             fun sameNote(s: MainState) = gen == translationGeneration &&
                 s.result?.let { it.id == r.id && it.revision == r.revision } == true
@@ -791,7 +827,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 throw t
             } catch (t: Throwable) {
                 _state.update {
-                    if (sameNote(it)) it.copy(translating = null, toast = "Çeviri yapılamadı: ${t.message ?: "internet bağlantısını kontrol et"}")
+                    if (sameNote(it)) it.copy(translating = null, toast = tx("Çeviri yapılamadı: {0}", t.message ?: tx("internet bağlantısını kontrol et")))
                     else it
                 }
             }
@@ -805,7 +841,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!state.value.hasAudio) return
         runCatching {
             player.toggle { _state.update { it.copy(playing = false, positionMs = 0) } }
-        }.onFailure { toast("Ses çalınamadı"); return }
+        }.onFailure { toast(tx("Ses çalınamadı")); return }
         val playing = player.isPlaying
         _state.update { it.copy(playing = playing) }
         ticker?.cancel()
@@ -853,7 +889,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return try {
             ImportCopy.copy({ ctx.contentResolver.openInputStream(uri) }, out, MAX_FILE_MB * 1024L * 1024L) { s.alive() }
         } catch (e: ImportCopy.EmptyImportException) {
-            throw DecodeException("Dosya boş")
+            throw DecodeException(tx("Dosya boş"))
         }
     }
 

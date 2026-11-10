@@ -38,6 +38,10 @@ class MainActivity : ComponentActivity() {
         // Ayarlar'da "İşlem bitince haber ver" açılınca istenir.
         ShareIntegration.publishShareShortcut(this)
         if (savedInstanceState == null) handleShare(intent)
+        // Uygulama içi puanlama: ViewModel isteyince (not kapatılırken) Play penceresi açılır
+        lifecycleScope.launch {
+            vm.state.map { it.reviewRequest }.distinctUntilChanged().collect { n -> ReviewPrompt.ask(this@MainActivity, n) }
+        }
         setContent {
             // Yalnızca tema değişince yenilenir (oynatma adımlarında kök yeniden çizilmesin)
             val themeFlow = remember { vm.state.map { it.themeMode }.distinctUntilChanged() }
@@ -56,7 +60,9 @@ class MainActivity : ComponentActivity() {
                     onNewAudio = { then -> then() }, // reklam artık döküm başında
                     // Metin ekrana gelmeden önce; metin geldiyse / iş iptal edildiyse gösterilmez
                     onProcessingAd = {
-                        lifecycleScope.launch { Ads.showWhenReady(this@MainActivity, stillWanted = vm::adStillWanted) }
+                        lifecycleScope.launch {
+                            Ads.showWhenReady(this@MainActivity, stillWanted = vm::adStillWanted, atAppOpen = vm.adAtAppOpen)
+                        }
                     },
                 )
             }
@@ -85,15 +91,18 @@ class MainActivity : ComponentActivity() {
             vm.openNoteById(noteId)
             return
         }
-        if (intent?.action != Intent.ACTION_SEND) return
-        val uri: Uri? = if (Build.VERSION.SDK_INT >= 33) {
+        val action = intent?.action
+        if (intent == null || (action != Intent.ACTION_SEND && action != Intent.ACTION_VIEW)) return
+        val uri: Uri? = if (action == Intent.ACTION_VIEW) {
+            intent.data // "Birlikte aç"
+        } else if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
         } else {
             @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
         }
         if (uri != null) {
-            ShareIntegration.reportUsed(this) // paylaş listesinde öne çıkma sinyali
-            vm.onAudio(uri)
+            if (action == Intent.ACTION_SEND) ShareIntegration.reportUsed(this) // paylaş listesinde öne çıkma sinyali
+            vm.onSharedAudio(uri)
         }
     }
 }

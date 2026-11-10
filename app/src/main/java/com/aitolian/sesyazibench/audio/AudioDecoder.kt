@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.audio
 
+import com.aitolian.sesyazibench.tx
+
 import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
@@ -32,29 +34,29 @@ object AudioDecoder {
         var codec: MediaCodec? = null
         try {
             context.contentResolver.openFileDescriptor(uri, "r").use { pfd ->
-                if (pfd == null) throw DecodeException("Dosya açılamadı")
+                if (pfd == null) throw DecodeException(tx("Dosya açılamadı"))
                 try {
                     extractor.setDataSource(pfd.fileDescriptor)
                 } catch (t: Throwable) {
-                    throw DecodeException("Bu dosya okunamadı (desteklenmeyen biçim)")
+                    throw DecodeException(tx("Bu dosya okunamadı (desteklenmeyen biçim)"))
                 }
             }
             // İlk ses izi seçilir (davranış değişmedi); birden çok iz varsa teşhiste görünür
             val audioTracks = (0 until extractor.trackCount).filter {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             }
-            val track = audioTracks.firstOrNull() ?: throw DecodeException("Bu dosyada ses bulunamadı")
+            val track = audioTracks.firstOrNull() ?: throw DecodeException(tx("Bu dosyada ses bulunamadı"))
             extractor.selectTrack(track)
             val format = extractor.getTrackFormat(track)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: "audio/?"
             if (format.containsKey(MediaFormat.KEY_DURATION) &&
                 format.getLong(MediaFormat.KEY_DURATION) / 1000 > MAX_DURATION_MS
-            ) throw DecodeException("Şimdilik en fazla 30 dakikalık ses destekleniyor")
+            ) throw DecodeException(tx("Şimdilik en fazla 30 dakikalık ses destekleniyor"))
 
             val c = try {
                 MediaCodec.createDecoderByType(mime)
             } catch (t: Throwable) {
-                throw DecodeException("Bu ses biçimi ($mime) telefonunda desteklenmiyor")
+                throw DecodeException(tx("Bu ses biçimi ({0}) telefonunda desteklenmiyor", mime))
             }
             // Önce atanır: configure/start hata verirse finally bloğu yine serbest bırakır
             codec = c
@@ -62,7 +64,7 @@ object AudioDecoder {
                 c.configure(format, null, null, 0)
                 c.start()
             } catch (t: Throwable) {
-                throw DecodeException("Bu ses biçimi ($mime) telefonunda desteklenmiyor")
+                throw DecodeException(tx("Bu ses biçimi ({0}) telefonunda desteklenmiyor", mime))
             }
 
             var inRate = format.intOr(MediaFormat.KEY_SAMPLE_RATE, 44_100)
@@ -84,7 +86,7 @@ object AudioDecoder {
                 if (cancelled()) throw DecodeException("İptal edildi")
                 // Girdi/çıktı vermeyen (takılan) çözücü: 20 sn ilerleme yoksa bırak
                 if (android.os.SystemClock.elapsedRealtime() - lastProgressAt > 20_000) {
-                    throw DecodeException("Ses çözülemedi (çözücü yanıt vermiyor)")
+                    throw DecodeException(tx("Ses çözülemedi (çözücü yanıt vermiyor)"))
                 }
                 if (!inputDone) {
                     val inIdx = c.dequeueInputBuffer(TIMEOUT_US)
@@ -122,7 +124,7 @@ object AudioDecoder {
                             out.position(info.offset); out.limit(info.offset + info.size)
                             resampler.push(downmix.toMono(out, channels, pcmFloat))
                             if (resampler.outputSize.toLong() * 1000 / TARGET_RATE > MAX_DURATION_MS) {
-                                throw DecodeException("Şimdilik en fazla 30 dakikalık ses destekleniyor")
+                                throw DecodeException(tx("Şimdilik en fazla 30 dakikalık ses destekleniyor"))
                             }
                         }
                         c.releaseOutputBuffer(outIdx, false)

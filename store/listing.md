@@ -99,7 +99,8 @@ MuteRead, WhatsApp veya Meta ile bağlantılı değildir; onlar tarafından dest
 
 - Kısa açıklama başlığı tekrar etmez, tamamlar: en-US "transcribe / voice notes / audio to text", tr-TR "ses kaydı / sesli not / yazıya çevir".
 - Uzun açıklama Google Play'de aranır: ana ifadeler ilk üç cümlede ve bölüm başlıklarında, doğal yoğunlukta. Anahtar kelime yığma yok.
-- Diğer 9 dilde uzun açıklama YOK. Play Console her dil için uzun açıklama ister; uygulama arayüzü de şu an yalnız Türkçe. Bu diller arayüz çevirisiyle birlikte yayınlanmalı (aksi halde mağaza vaadi ile uygulama uyuşmaz, düşük puan gelir).
+- Uygulama arayüzü v1.24 ile Türkçe + İngilizce (telefon dili Türkçe değilse İngilizce). Şimdilik yalnız en-US ve tr-TR mağaza sayfaları yayınlanmalı.
+- Diğer 9 dilde uzun açıklama ve arayüz çevirisi YOK. Play Console her dil için uzun açıklama ister; bu diller arayüz çevirisiyle birlikte yayınlanmalı (aksi halde mağaza vaadi ile uygulama uyuşmaz, düşük puan gelir).
 - de/fr/es/it/pt/ru/ar/hi/id kısa açıklamalarında hız vaadi ("saniyeler içinde") yok; en/tr ile hizalanacak.
 - Başlıkta boş kalan karakterler: tr 4, fr 6, es 6, it 5, pt 4, hi 4. Anadili kontrolüyle doldurulabilir.
 - Sürüm notu (en-US, 110 kr.): First release: share a voice message, read it as text in seconds. Notes, translation and .srt export included.

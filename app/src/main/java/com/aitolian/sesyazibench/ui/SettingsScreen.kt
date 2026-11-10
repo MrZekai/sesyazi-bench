@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.ui
 
+import com.aitolian.sesyazibench.tx
+
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -75,11 +77,11 @@ import kotlinx.coroutines.launch
 private const val PRIVACY_URL = "https://mrzekai.github.io/muteread-privacy.html"
 private const val SUPPORT_EMAIL = "aitolianrock@gmail.com"
 
-private const val LICENSES =
-    "• Wit.ai (Meta) — konuşmayı yazıya dökme hizmeti, Wit.ai Hizmet Koşulları\n" +
-    "• Google ML Kit Çeviri — Google APIs Hizmet Şartları\n" +
-    "• Google Mobile Ads SDK, User Messaging Platform — Google Hizmet Şartları\n" +
-    "• AndroidX, Jetpack Compose, Kotlin — Apache Lisansı 2.0"
+private val LICENSES: String get() =
+    tx("• Wit.ai (Meta) — konuşmayı yazıya dökme hizmeti, Wit.ai Hizmet Koşulları\n") +
+    tx("• Google ML Kit Çeviri — Google APIs Hizmet Şartları\n") +
+    tx("• Google Mobile Ads SDK, User Messaging Platform — Google Hizmet Şartları\n") +
+    tx("• AndroidX, Jetpack Compose, Kotlin — Apache Lisansı 2.0")
 
 @Composable
 fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
@@ -99,7 +101,7 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         notify = granted
         vm.prefs.notifyWhenDone = granted
-        if (!granted) vm.toast("Bildirim izni verilmedi; işlem bitince haber verilemez")
+        if (!granted) vm.toast(tx("Bildirim izni verilmedi; işlem bitince haber verilemez"))
     }
     var showLicenses by remember { mutableStateOf(false) }
 
@@ -107,52 +109,52 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(SY.Bg).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconTap(Icons.AutoMirrored.Filled.ArrowBack, "Geri", onClick = onBack)
-            Text("Ayarlar", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = SY.Text)
+            IconTap(Icons.AutoMirrored.Filled.ArrowBack, tx("Geri"), onClick = onBack)
+            Text(tx("Ayarlar"), fontSize = 21.sp, fontWeight = FontWeight.Bold, color = SY.Text)
         }
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // --- Görünüm ---
-            Group("Görünüm") {
-                Text("Tema", color = SY.Text, fontSize = 14.5.sp)
-                Segmented(listOf("Sistem", "Açık", "Koyu"), s.themeMode) { vm.setThemeMode(it) }
-                Hint("Yazı boyutu, satır aralığı ve sesle takip: not ekranındaki \"Aa\" düğmesi.")
+            Group(tx("Görünüm")) {
+                Text(tx("Tema"), color = SY.Text, fontSize = 14.5.sp)
+                Segmented(listOf(tx("Sistem"), tx("Açık"), tx("Koyu")), s.themeMode) { vm.setThemeMode(it) }
+                Hint(tx("Yazı boyutu, satır aralığı ve sesle takip: not ekranındaki \"Aa\" düğmesi."))
             }
 
             // --- Transkript ---
-            Group("Transkript") {
-                LangRow("Varsayılan konuşma dili", s.lang, vm.speechLangs, vm::setDefaultLang)
-                Hint("⚡ Sesler saniyeler içinde yazıya dökülür (internet gerekir). WhatsApp'tan paylaştığın ses bu dilde dökülür; farklıysa not menüsünden dili değiştir.")
+            Group(tx("Transkript")) {
+                LangRow(tx("Varsayılan konuşma dili"), s.lang, vm.speechLangs, vm::setDefaultLang)
+                Hint(tx("⚡ Sesler saniyeler içinde yazıya dökülür (internet gerekir). WhatsApp'tan paylaştığın ses bu dilde dökülür; farklıysa not menüsünden dili değiştir."))
             }
 
             // --- Çeviri ---
-            Group("Çeviri") {
-                LangRow("Varsayılan çeviri dili", s.translationTarget, TRANSLATABLE, vm::setDefaultTarget)
+            Group(tx("Çeviri")) {
+                LangRow(tx("Varsayılan çeviri dili"), s.translationTarget, TRANSLATABLE, vm::setDefaultTarget)
                 Divider()
-                Text("İndirilen dil paketleri", color = SY.Text, fontSize = 14.5.sp)
+                Text(tx("İndirilen dil paketleri"), color = SY.Text, fontSize = 14.5.sp)
                 val list = packs
                 when {
-                    list == null -> Hint("Yükleniyor…")
-                    list.isEmpty() -> Hint("Henüz dil paketi yok. İlk çeviride otomatik indirilir (~30 MB).")
+                    list == null -> Hint(tx("Yükleniyor…"))
+                    list.isEmpty() -> Hint(tx("Henüz dil paketi yok. İlk çeviride otomatik indirilir (~30 MB)."))
                     else -> list.forEach { l ->
                         ItemRow(l.label, "~30 MB") {
-                            TextAction("Sil", SY.Error) {
-                                scope.launch { runCatching { OnDeviceTranslator.delete(l) }; refresh++; vm.toast("${l.label} paketi silindi") }
+                            TextAction(tx("Sil"), SY.Error) {
+                                scope.launch { runCatching { OnDeviceTranslator.delete(l) }; refresh++; vm.toast(tx("{0} paketi silindi", l.label)) }
                             }
                         }
                     }
                 }
-                Hint("Çeviri telefonunda yapılır; metnin hiçbir sunucuya gönderilmez.")
+                Hint(tx("Çeviri telefonunda yapılır; metnin hiçbir sunucuya gönderilmez."))
             }
 
             // --- Bildirimler ---
-            Group("Bildirimler") {
+            Group(tx("Bildirimler")) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("İşlem bitince haber ver", color = SY.Text, fontSize = 14.sp)
-                        Text("Uygulamadan çıktığında uzun dökümler bitince bildirim gelir.", color = SY.Muted, fontSize = 12.sp)
+                        Text(tx("İşlem bitince haber ver"), color = SY.Text, fontSize = 14.sp)
+                        Text(tx("Uygulamadan çıktığında uzun dökümler bitince bildirim gelir."), color = SY.Muted, fontSize = 12.sp)
                     }
                     Switch(
                         checked = notify,
@@ -170,42 +172,42 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
             }
 
             // --- Gizlilik ---
-            Group("Gizlilik") {
+            Group(tx("Gizlilik")) {
                 Text(
-                    "Ses, yazıya dökülmek için Meta'nın Wit.ai hizmetine gönderilir. Meta bu verileri kendi " +
-                        "koşulları kapsamında işler; Wit.ai politikasına göre ses verileri en fazla 90 gün saklanır ve " +
-                        "konuşma tanımayı geliştirmek için analiz edilebilir. Bizim bir sunucumuz yok; notların ve sesin " +
-                        "geçici kopyası yalnızca telefonunda tutulur. Çeviri cihazda yapılır. Reklamlar Google AdMob " +
-                        "tarafından gösterilir. Yalnızca yazıya dökme hakkın olan sesleri paylaş.",
+                    tx("Ses, yazıya dökülmek için Meta'nın Wit.ai hizmetine gönderilir. Meta bu verileri kendi ") +
+                        tx("koşulları kapsamında işler; Wit.ai politikasına göre ses verileri en fazla 90 gün saklanır ve ") +
+                        tx("konuşma tanımayı geliştirmek için analiz edilebilir. Bizim bir sunucumuz yok; notların ve sesin ") +
+                        tx("geçici kopyası yalnızca telefonunda tutulur. Çeviri cihazda yapılır. Reklamlar Google AdMob ") +
+                        tx("tarafından gösterilir. Yalnızca yazıya dökme hakkın olan sesleri paylaş."),
                     color = SY.Muted, fontSize = 12.5.sp,
                 )
-                LinkRow("Gizlilik politikası") { openUrl(context, PRIVACY_URL) }
-                LinkRow("Tüm notları sil (${s.history.size})") { confirmClear = true }
+                LinkRow(tx("Gizlilik politikası")) { openUrl(context, PRIVACY_URL) }
+                LinkRow(tx("Tüm notları sil ({0})", s.history.size)) { confirmClear = true }
                 if (activity != null && Ads.privacyOptionsRequired(activity)) {
-                    LinkRow("Reklam tercihleri") { Ads.showPrivacyOptions(activity) }
+                    LinkRow(tx("Reklam tercihleri")) { Ads.showPrivacyOptions(activity) }
                 }
             }
 
             // --- Hakkında ---
-            Group("Hakkında") {
-                ItemRow("Sürüm", appVersion(context), modifier = Modifier.clickable {
+            Group(tx("Hakkında")) {
+                ItemRow(tx("Sürüm"), appVersion(context), modifier = Modifier.clickable {
                     versionTaps++
-                    if (versionTaps >= 7 && !devMode) { devMode = true; vm.prefs.devMode = true; vm.toast("Geliştirici araçları açıldı") }
+                    if (versionTaps >= 7 && !devMode) { devMode = true; vm.prefs.devMode = true; vm.toast(tx("Geliştirici araçları açıldı")) }
                 }) {}
-                LinkRow("Geri bildirim gönder") {
+                LinkRow(tx("Geri bildirim gönder")) {
                     val i = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$SUPPORT_EMAIL"))
-                        .putExtra(Intent.EXTRA_SUBJECT, context.getString(com.aitolian.sesyazibench.R.string.app_name) + " geri bildirim (${appVersion(context)})")
+                        .putExtra(Intent.EXTRA_SUBJECT, context.getString(com.aitolian.sesyazibench.R.string.app_name) + tx(" geri bildirim ({0})", appVersion(context)))
                     runCatching { context.startActivity(i) }
                 }
-                LinkRow("Açık kaynak lisansları") { showLicenses = true }
+                LinkRow(tx("Açık kaynak lisansları")) { showLicenses = true }
                 // Wit.ai Hizmet Koşulları 3.6: "Powered by Wit" + web sitesine bağlantı
                 LinkRow("Powered by Wit · wit.ai") { openUrl(context, "https://wit.ai") }
                 Text(
-                    "Bu uygulama WhatsApp veya Meta tarafından geliştirilmemiş, desteklenmemiş veya onaylanmamıştır. " +
-                        "WhatsApp, WhatsApp LLC'nin ticari markasıdır. Yazıya dökme Meta'nın Wit.ai hizmetini kullanır.",
+                    tx("Bu uygulama WhatsApp veya Meta tarafından geliştirilmemiş, desteklenmemiş veya onaylanmamıştır. ") +
+                        tx("WhatsApp, WhatsApp LLC'nin ticari markasıdır. Yazıya dökme Meta'nın Wit.ai hizmetini kullanır."),
                     color = SY.Muted, fontSize = 11.5.sp,
                 )
-                LinkRow("Uygulamayı puanla") {
+                LinkRow(tx("Uygulamayı puanla")) {
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}"))) }
                         .onFailure { openUrl(context, "https://play.google.com/store/apps/details?id=${context.packageName}") }
                 }
@@ -216,19 +218,19 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
                 AlertDialog(
                     onDismissRequest = { confirmClear = false },
                     containerColor = SY.Sheet, titleContentColor = SY.Text, textContentColor = SY.Muted,
-                    title = { Text("Tüm notlar silinsin mi?") },
-                    text = { Text("Telefondaki tüm notlar, dışa aktarılan dosyalar ve ölçüm kayıtları silinir. Çalışan döküm durdurulur. Bu işlem geri alınamaz.") },
-                    confirmButton = { TextButton(onClick = { vm.clearHistory(); confirmClear = false }) { Text("Sil", color = SY.Error) } },
-                    dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Vazgeç", color = SY.Accent) } },
+                    title = { Text(tx("Tüm notlar silinsin mi?")) },
+                    text = { Text(tx("Telefondaki tüm notlar, dışa aktarılan dosyalar ve ölçüm kayıtları silinir. Çalışan döküm durdurulur. Bu işlem geri alınamaz.")) },
+                    confirmButton = { TextButton(onClick = { vm.clearHistory(); confirmClear = false }) { Text(tx("Sil"), color = SY.Error) } },
+                    dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(tx("Vazgeç"), color = SY.Accent) } },
                 )
             }
             if (showLicenses) {
                 AlertDialog(
                     onDismissRequest = { showLicenses = false },
                     containerColor = SY.Sheet, titleContentColor = SY.Text, textContentColor = SY.Muted,
-                    title = { Text("Açık kaynak lisansları") },
+                    title = { Text(tx("Açık kaynak lisansları")) },
                     text = { Text(LICENSES, fontSize = 12.5.sp) },
-                    confirmButton = { TextButton(onClick = { showLicenses = false }) { Text("Kapat", color = SY.Accent) } },
+                    confirmButton = { TextButton(onClick = { showLicenses = false }) { Text(tx("Kapat"), color = SY.Accent) } },
                 )
             }
             Spacer(Modifier.height(24.dp))
@@ -257,7 +259,7 @@ private fun DevTools(vm: MainViewModel, s: MainState, onClose: () -> Unit) {
                 if (!shareCsv(context)) vm.toast("Henüz kayıt yok (geliştirici modu açıkken dökülen sesler kaydedilir)")
             })
             Pill("Sil", bg = SY.Chip, fg = SY.Text, onClick = { ResultLog.clear(context); vm.toast("Kayıtlar silindi") })
-            Pill("Kapat", bg = SY.Chip, fg = SY.Text, onClick = { vm.disableDevMode(); onClose() })
+            Pill(tx("Kapat"), bg = SY.Chip, fg = SY.Text, onClick = { vm.disableDevMode(); onClose() })
         }
     }
 }

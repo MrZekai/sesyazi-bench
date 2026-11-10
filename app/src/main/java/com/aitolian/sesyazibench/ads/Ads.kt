@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
@@ -12,6 +13,7 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.appopen.AppOpenAd
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.ump.ConsentInformation
@@ -29,6 +31,7 @@ object Ads {
     val BANNER_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_BANNER
     val INTERSTITIAL_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_INTERSTITIAL
     val NATIVE_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_NATIVE
+    val APP_OPEN_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_APP_OPEN
 
     // Geçiş reklamı sınırları (her döküm başında denenir; bu sınırlar aşırılığı önler)
     private const val MIN_GAP_MS = 60_000L          // iki reklam arası en az 60 sn
@@ -40,6 +43,12 @@ object Ads {
     val ready: StateFlow<Boolean> = _ready
     private var interstitial: InterstitialAd? = null
     private var loading = false
+    // Uygulama açılış (app open) reklamı: başka uygulamadan paylaşımla açılışta/öne gelişte
+    // gösterilir. AdMob, uygulama yüklenirken geçiş reklamını yasaklar ve bu biçimi önerir.
+    private var appOpen: AppOpenAd? = null
+    private var appOpenLoadedAt = 0L
+    private var appOpenLoading = false
+    private const val APP_OPEN_TTL_MS = 4 * 3_600_000L // Google: 4 saatten eski reklam gösterilmez
     private var appContext: Context? = null
     private val main = Handler(Looper.getMainLooper())
     private const val PREFS = "ads"
@@ -77,6 +86,7 @@ object Ads {
             main.post {
                 _ready.value = true
                 loadInterstitial()
+                loadAppOpen()
             }
         }
     }
@@ -95,6 +105,35 @@ object Ads {
                     interstitial = null
                     Log.w("Ads", "interstitial load: ${error.message}")
                     if (retry < 3) main.postDelayed({ loadInterstitial(retry + 1) }, 30_000L * (retry + 1))
+                }
+            },
+        )
+    }
+
+    /** Süresi dolmamış açılış reklamı (yoksa null). Ana iş parçacığında çağrılır. */
+    private fun freshAppOpen(): AppOpenAd? {
+        val ad = appOpen ?: return null
+        if (SystemClock.elapsedRealtime() - appOpenLoadedAt > APP_OPEN_TTL_MS) { appOpen = null; return null }
+        return ad
+    }
+
+    /** Ana iş parçacığında çağrılır. */
+    private fun loadAppOpen() {
+        val context = appContext ?: return
+        if (appOpenLoading || freshAppOpen() != null) return
+        appOpenLoading = true
+        AppOpenAd.load(
+            context, APP_OPEN_ID, AdRequest.Builder().build(),
+            object : AppOpenAd.AppOpenAdLoadCallback() {
+                override fun onAdLoaded(ad: AppOpenAd) {
+                    appOpenLoading = false
+                    appOpen = ad
+                    appOpenLoadedAt = SystemClock.elapsedRealtime()
+                }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    appOpenLoading = false
+                    appOpen = null
+                    Log.w("Ads", "app open load: ${error.message}")
                 }
             },
         )
@@ -130,21 +169,28 @@ object Ads {
      * ekrana geldi, iptal, yeni ses) bırakılır: okunan metnin üstüne sonradan tam
      * ekran reklam binmez (AdMob geçiş reklamı politikası). Döküm reklamı beklemez.
      */
-    suspend fun showWhenReady(activity: ComponentActivity, stillWanted: () -> Boolean, timeoutMs: Long = 5_000) {
+    suspend fun showWhenReady(
+        activity: ComponentActivity,
+        stillWanted: () -> Boolean,
+        /** true: uygulama paylaşımla açıldı/öne geldi → açılış reklamı; false: uygulama içi geçiş → geçiş reklamı. */
+        atAppOpen: Boolean = false,
+        timeoutMs: Long = 5_000,
+    ) {
+        fun loaded() = if (atAppOpen) freshAppOpen() != null else interstitial != null
         var waited = 0L
         while (!_ready.value && waited < timeoutMs) {
             if (!stillWanted()) return
             kotlinx.coroutines.delay(150); waited += 150
         }
         if (!_ready.value) return
-        if (interstitial == null) main.post { loadInterstitial() }
-        while (interstitial == null && waited < timeoutMs) {
+        if (!loaded()) main.post { if (atAppOpen) loadAppOpen() else loadInterstitial() }
+        while (!loaded() && waited < timeoutMs) {
             if (!stillWanted()) return
             kotlinx.coroutines.delay(150); waited += 150
         }
         if (!stillWanted()) return
         if (!activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
-        showIfAllowed(activity)
+        showIfAllowed(activity, atAppOpen)
     }
 
     /** Tam ekran reklam şu an ekranda mı (aynı anda ikinci gösterim olmasın). */
@@ -155,19 +201,23 @@ object Ads {
      * Kota yalnız GERÇEK gösterimde (onAdShowedFullScreenContent) bir kez artar;
      * gösterilemeyen reklam 60 sn / saatlik kotayı tüketmez.
      */
-    private fun showIfAllowed(activity: Activity) {
+    private fun showIfAllowed(activity: Activity, atAppOpen: Boolean) {
         val now = System.currentTimeMillis()
         // Kapanış geri çağrısı hiç gelmezse (etkinlik yok edildi vb.) kilit 5 dk sonra düşer
         if (showing && now - showingSince < 300_000L) return
         val times = recentShows(activity, now)
         val last = times.maxOrNull()
         val allowed = (last == null || now - last >= MIN_GAP_MS) && times.size < MAX_PER_HOUR
-        val ad = interstitial
-        if (!allowed || ad == null) return
-        interstitial = null // tek kullanımlık nesne: gösterimden önce tüket
+        if (!allowed) return
+        val open = if (atAppOpen) freshAppOpen() else null
+        val inter = if (atAppOpen) null else interstitial
+        if (open == null && inter == null) return
+        // tek kullanımlık nesne: gösterimden önce tüket
+        if (atAppOpen) appOpen = null else interstitial = null
+        fun reload() { if (atAppOpen) loadAppOpen() else loadInterstitial() }
         val appCtx = activity.applicationContext
         var counted = false
-        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+        val callback = object : FullScreenContentCallback() {
             override fun onAdShowedFullScreenContent() {
                 if (counted) return
                 counted = true
@@ -178,16 +228,22 @@ object Ads {
             }
             override fun onAdDismissedFullScreenContent() {
                 showing = false
-                loadInterstitial()
+                reload()
             }
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 showing = false
-                Log.w("Ads", "interstitial show: ${error.message}")
-                loadInterstitial()
+                Log.w("Ads", "full screen show: ${error.message}")
+                reload()
             }
         }
         showing = true
         showingSince = now
-        ad.show(activity)
+        if (open != null) {
+            open.fullScreenContentCallback = callback
+            open.show(activity)
+        } else if (inter != null) {
+            inter.fullScreenContentCallback = callback
+            inter.show(activity)
+        }
     }
 }

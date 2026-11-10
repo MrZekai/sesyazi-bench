@@ -46,6 +46,14 @@
                 <data android:mimeType="application/ogg" />
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
+            <!-- Dosya yöneticisi / sohbet uygulamasında ses dosyasına dokununca "Birlikte aç" -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
         </activity>
 
         <provider

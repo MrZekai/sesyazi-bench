@@ -38,6 +38,11 @@ class Prefs(context: Context) {
         get() = p.getInt("theme", 1) // varsayılan: açık tema
         set(v) = p.edit().putInt("theme", v).apply()
 
+    /** Sorunsuz biten döküm sayısı (uygulama içi puanlama zamanlaması için). */
+    var okCount: Int
+        get() = p.getInt("ok_count", 0)
+        set(v) = p.edit().putInt("ok_count", v).apply()
+
     var devMode: Boolean
         get() = p.getBoolean("dev", false)
         set(v) = p.edit().putBoolean("dev", v).apply()

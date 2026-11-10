@@ -26,7 +26,7 @@ object ShareIntegration {
             val label = context.getString(R.string.app_name)
             val shortcut = ShortcutInfoCompat.Builder(context, SHORTCUT_ID)
                 .setShortLabel(label)
-                .setLongLabel("$label ile yazıya dök")
+                .setLongLabel(tx("{0} ile yazıya dök", label))
                 .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
                 .setIntent(Intent(context, MainActivity::class.java).setAction(Intent.ACTION_MAIN))
                 .setLongLived(true)

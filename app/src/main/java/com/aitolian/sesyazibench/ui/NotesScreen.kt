@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.ui
 
+import com.aitolian.sesyazibench.tx
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -85,8 +87,8 @@ fun AllNotesScreen(s: MainState, vm: MainViewModel, focusSearch: Boolean = false
 
     Column(Modifier.fillMaxSize().background(SY.Bg).statusBarsPadding().navigationBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconTap(Icons.AutoMirrored.Filled.ArrowBack, "Geri", onClick = onBack)
-            Text("Notlarım", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = SY.Text, modifier = Modifier.weight(1f))
+            IconTap(Icons.AutoMirrored.Filled.ArrowBack, tx("Geri"), onClick = onBack)
+            Text(tx("Notlarım"), fontSize = 21.sp, fontWeight = FontWeight.Bold, color = SY.Text, modifier = Modifier.weight(1f))
             Text("${s.history.size}/${com.aitolian.sesyazibench.data.HistoryStore.MAX}", color = SY.Muted, fontSize = 12.sp,
                 modifier = Modifier.padding(end = 12.dp))
         }
@@ -99,19 +101,19 @@ fun AllNotesScreen(s: MainState, vm: MainViewModel, focusSearch: Boolean = false
         ) {
             Icon(Icons.Filled.Search, contentDescription = null, tint = SY.Muted, modifier = Modifier.size(22.dp))
             Box(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                if (query.isEmpty()) Text("Notlarda ara…", color = SY.Muted, fontSize = 15.sp)
+                if (query.isEmpty()) Text(tx("Notlarda ara…"), color = SY.Muted, fontSize = 15.sp)
                 BasicTextField(
                     value = query, onValueChange = { query = it }, singleLine = true,
                     textStyle = TextStyle(color = SY.Text, fontSize = 15.sp),
                     cursorBrush = SolidColor(SY.Accent),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Notlarda ara" },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = tx("Notlarda ara") },
                 )
             }
-            if (query.isNotEmpty()) IconTap(Icons.Filled.Close, "Aramayı temizle", tint = SY.Muted) { query = "" }
+            if (query.isNotEmpty()) IconTap(Icons.Filled.Close, tx("Aramayı temizle"), tint = SY.Muted) { query = "" }
         }
         if (results.isEmpty()) {
             Text(
-                if (q.isEmpty()) "Henüz not yok." else "\"$query\" hiçbir notta geçmiyor.",
+                if (q.isEmpty()) tx("Henüz not yok.") else tx("\"{0}\" hiçbir notta geçmiyor.", query),
                 color = SY.Muted, fontSize = 14.sp, modifier = Modifier.padding(24.dp),
             )
         }
@@ -129,7 +131,7 @@ fun AllNotesScreen(s: MainState, vm: MainViewModel, focusSearch: Boolean = false
             }
         }
         Text(
-            "${s.history.size}/${com.aitolian.sesyazibench.data.HistoryStore.MAX} not. Sınır dolunca yeni not gelince en eskisi silinir; önemli notları dışa aktar.",
+            tx("{0}/{1} not. Sınır dolunca yeni not gelince en eskisi silinir; önemli notları dışa aktar.", s.history.size, com.aitolian.sesyazibench.data.HistoryStore.MAX),
             color = SY.Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
         )
     }
@@ -143,12 +145,12 @@ private fun UndoRow(s: MainState, vm: MainViewModel) {
             .background(SY.Card).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Silindi: ${d.preview}", color = SY.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(tx("Silindi: {0}", d.preview), color = SY.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Box(
             Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = vm::undoDelete)
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
-        ) { Text("Geri al", color = SY.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+        ) { Text(tx("Geri al"), color = SY.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
     }
 }
 
@@ -168,7 +170,7 @@ internal fun NoteRow(t: Transcript, onOpen: () -> Unit, onDelete: () -> Unit, sn
     Column(
         Modifier.fillMaxWidth()
             .combinedClickable(
-                onClickLabel = "Notu aç", onLongClickLabel = "Notu sil",
+                onClickLabel = tx("Notu aç"), onLongClickLabel = tx("Notu sil"),
                 onClick = onOpen, onLongClick = onDelete,
             )
             .padding(horizontal = 16.dp, vertical = 14.dp),

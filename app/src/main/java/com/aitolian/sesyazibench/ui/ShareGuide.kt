@@ -1,5 +1,7 @@
 package com.aitolian.sesyazibench.ui
 
+import com.aitolian.sesyazibench.tx
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,9 +47,9 @@ private val WaBar = Color(0xFF1F2C33)
 fun ShareGuide() {
     val app = stringResource(R.string.app_name)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Step(1, "Sesli mesaja uzun bas", "WhatsApp sohbetinde, mesaj seçilene kadar") { IllLongPress() }
-        Step(2, "Paylaş simgesine dokun", "Üst çubukta (bazı telefonlarda ⋮ menüsünde)") { IllShareIcon() }
-        Step(3, "Listeden $app uygulamasını seç", "Metin hemen hazırlanır. Bir sonraki sefer listede ilk sıralarda olur.") {
+        Step(1, tx("Sesli mesaja uzun bas"), tx("WhatsApp sohbetinde, mesaj seçilene kadar")) { IllLongPress() }
+        Step(2, tx("Paylaş simgesine dokun"), tx("Üst çubukta (bazı telefonlarda ⋮ menüsünde)")) { IllShareIcon() }
+        Step(3, tx("Listeden {0} uygulamasını seç", app), tx("Metin hemen hazırlanır. Bir sonraki sefer listede ilk sıralarda olur.")) {
             IllShareSheet(app)
         }
     }
