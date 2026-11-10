@@ -270,7 +270,7 @@ fun NoteScreen(s: MainState, vm: MainViewModel, adsReady: Boolean, onHome: () ->
                         shownText?.let { copyText(context, it); vm.toast(tx("Kopyalandı")) }
                     }
                     BarAction(Icons.Filled.Share, tx("Paylaş"), Modifier.weight(1f), enabled = ready) {
-                        shownText?.let { shareText(context, it) }
+                        shownText?.let { shareText(context, vm.withSignature(it)) }
                     }
                     MoreAction(s, r, Modifier.weight(1f), onEdit = ::startEdit)
                 }

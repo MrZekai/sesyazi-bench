@@ -62,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.content.FileProvider
 import com.aitolian.sesyazibench.MainState
 import com.aitolian.sesyazibench.MainViewModel
@@ -104,6 +105,9 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
         if (!granted) vm.toast(tx("Bildirim izni verilmedi; işlem bitince haber verilemez"))
     }
     var showLicenses by remember { mutableStateOf(false) }
+    var signature by remember { mutableStateOf(vm.prefs.shareSignature) }
+    val adFree by Ads.adFree.collectAsStateWithLifecycle()
+    var rewardLoading by remember { mutableStateOf(false) }
 
     LaunchedEffect(refresh) { packs = runCatching { OnDeviceTranslator.downloadedLanguages() }.getOrDefault(emptyList()) }
 
@@ -127,6 +131,48 @@ fun SettingsScreen(vm: MainViewModel, s: MainState, onBack: () -> Unit) {
             Group(tx("Transkript")) {
                 LangRow(tx("Varsayılan konuşma dili"), s.lang, vm.speechLangs, vm::setDefaultLang)
                 Hint(tx("⚡ Sesler saniyeler içinde yazıya dökülür (internet gerekir). WhatsApp'tan paylaştığın ses bu dilde dökülür; farklıysa not menüsünden dili değiştir."))
+                Divider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(tx("Paylaşırken imza ekle"), color = SY.Text, fontSize = 14.sp)
+                        Text(tx("Paylaştığın metnin altına uygulamanın adı ve bağlantısı eklenir."), color = SY.Muted, fontSize = 12.sp)
+                    }
+                    Switch(
+                        checked = signature,
+                        onCheckedChange = { signature = it; vm.prefs.shareSignature = it },
+                        colors = SwitchDefaults.colors(checkedTrackColor = SY.Accent, checkedThumbColor = SY.OnAccent),
+                    )
+                }
+            }
+
+            // --- Reklamsız kullanım (ödüllü reklam) ---
+            Group(tx("Reklamsız kullanım")) {
+                if (adFree) {
+                    Hint(tx("Reklamlar kapalı. Kalan süre: yaklaşık {0} saat.", Ads.adFreeHoursLeft(context)))
+                } else {
+                    Hint(tx("Kısa bir reklam izle, 24 saat boyunca hiç reklam görme."))
+                    if (activity != null) {
+                        Pill(
+                            if (rewardLoading) tx("Yükleniyor…") else tx("Reklam izle · 24 saat reklamsız"),
+                            bg = SY.Accent, fg = SY.OnAccent,
+                            onClick = {
+                                if (!rewardLoading) {
+                                    rewardLoading = true
+                                    Ads.showRewarded(activity) { earned ->
+                                        rewardLoading = false
+                                        vm.toast(
+                                            when (earned) {
+                                                true -> tx("24 saat boyunca reklam yok. Teşekkürler!")
+                                                false -> tx("Ödül için reklamı sonuna kadar izlemen gerekiyor.")
+                                                null -> tx("Reklam şu an yüklenemedi. Biraz sonra tekrar dene.")
+                                            },
+                                        )
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
             }
 
             // --- Çeviri ---

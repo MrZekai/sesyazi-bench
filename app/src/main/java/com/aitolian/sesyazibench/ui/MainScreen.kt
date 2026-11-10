@@ -98,7 +98,9 @@ fun MainScreen(
     onProcessingAd: () -> Unit,
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
-    val adsReady by Ads.ready.collectAsStateWithLifecycle()
+    val adsLoaded by Ads.ready.collectAsStateWithLifecycle()
+    val adFree by Ads.adFree.collectAsStateWithLifecycle()
+    val adsReady = adsLoaded && !adFree // ödüllü reklamla kazanılan 24 saatte reklam yok
     val context = LocalContext.current
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var notesMode by rememberSaveable { mutableIntStateOf(NOTES_CLOSED) }
@@ -159,7 +161,10 @@ fun MainScreen(
         ) {
             TopBar(onHome = if (canGoHome) goHome else null, onSettings = { showSettings = true })
             if (busy || s.phase is Phase.Failed) {
-                StatusCard(s, busy, onCancel = vm::cancelWork, onRetry = { if (vm.canRetry()) vm.retranscribe() else openWhatsApp() })
+                StatusCard(
+                    s, busy, onCancel = vm::cancelWork, onRetry = { if (vm.canRetry()) vm.retranscribe() else openWhatsApp() },
+                    altLangs = if (!busy && vm.canRetry()) vm.suggestedLangs() else emptyList(), onLang = vm::retranscribeInLanguage,
+                )
             }
             if (!busy) Hero(s, firstUse = s.history.isEmpty(), onWhatsApp = openWhatsApp, onFile = pickFile)
             Controls(s, busy, vm)
@@ -251,7 +256,10 @@ private fun Hero(s: MainState, firstUse: Boolean, onWhatsApp: () -> Unit, onFile
 
 /** Hazırlık / indirme / döküm / hata: kompakt durum kartı (eski 128 dp'lik alan yerine). */
 @Composable
-private fun StatusCard(s: MainState, busy: Boolean, onCancel: () -> Unit, onRetry: () -> Unit) {
+private fun StatusCard(
+    s: MainState, busy: Boolean, onCancel: () -> Unit, onRetry: () -> Unit,
+    altLangs: List<com.aitolian.sesyazibench.engine.Lang>, onLang: (com.aitolian.sesyazibench.engine.Lang) -> Unit,
+) {
     val failed = s.phase is Phase.Failed
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(SY.Sheet)
@@ -284,6 +292,13 @@ private fun StatusCard(s: MainState, busy: Boolean, onCancel: () -> Unit, onRetr
                     Pill(tx("İptal"), bg = SY.Chip, fg = SY.Text, onClick = onCancel)
                 }
                 if (failed && !busy) Pill(tx("Tekrar dene"), bg = SY.Accent, fg = SY.OnAccent, onClick = onRetry)
+            }
+            // Yanlış dil en sık hata nedeni: tek dokunuşla başka dilde dene
+            if (failed && altLangs.isNotEmpty()) {
+                Text(tx("Konuşma başka dilde mi? Tek dokunuşla dene:"), fontSize = 12.sp, color = SY.Muted, modifier = Modifier.padding(top = 8.dp))
+                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    altLangs.forEach { l -> Pill(l.label, bg = SY.Chip, fg = SY.Text, onClick = { onLang(l) }) }
+                }
             }
         }
     }

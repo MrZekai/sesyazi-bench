@@ -43,6 +43,7 @@ android {
     val testInterstitial = "ca-app-pub-3940256099942544/1033173712"
     val testNative = "ca-app-pub-3940256099942544/2247696110"
     val testAppOpen = "ca-app-pub-3940256099942544/9257395921"
+    val testRewarded = "ca-app-pub-3940256099942544/5224354917"
     fun env(name: String, fallback: String) = System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() } ?: fallback
     fun q(v: String) = "\"" + v.replace("\\", "").replace("\"", "") + "\""
 
@@ -53,6 +54,7 @@ android {
             buildConfigField("String", "ADMOB_INTERSTITIAL", q(testInterstitial))
             buildConfigField("String", "ADMOB_NATIVE", q(testNative))
             buildConfigField("String", "ADMOB_APP_OPEN", q(testAppOpen))
+            buildConfigField("String", "ADMOB_REWARDED", q(testRewarded))
             buildConfigField("String", "ADMOB_TEST_DEVICES", q(""))
         }
         release {
@@ -66,6 +68,7 @@ android {
             buildConfigField("String", "ADMOB_INTERSTITIAL", q(env("ADMOB_INTERSTITIAL_ID", testInterstitial)))
             buildConfigField("String", "ADMOB_NATIVE", q(env("ADMOB_NATIVE_ID", testNative)))
             buildConfigField("String", "ADMOB_APP_OPEN", q(env("ADMOB_APP_OPEN_ID", testAppOpen)))
+            buildConfigField("String", "ADMOB_REWARDED", q(env("ADMOB_REWARDED_ID", testRewarded)))
             // Kendi test telefonlarında gerçek reklama tıklamamak için (virgülle ayrılmış cihaz kimlikleri)
             buildConfigField("String", "ADMOB_TEST_DEVICES", q(env("ADMOB_TEST_DEVICE_IDS", "")))
         }

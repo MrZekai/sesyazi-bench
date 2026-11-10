@@ -43,6 +43,11 @@ class Prefs(context: Context) {
         get() = p.getInt("ok_count", 0)
         set(v) = p.edit().putInt("ok_count", v).apply()
 
+    /** Paylaşılan metnin altına "… ile yazıya döküldü" satırı eklensin mi. */
+    var shareSignature: Boolean
+        get() = p.getBoolean("share_signature", true)
+        set(v) = p.edit().putBoolean("share_signature", v).apply()
+
     var devMode: Boolean
         get() = p.getBoolean("dev", false)
         set(v) = p.edit().putBoolean("dev", v).apply()

@@ -169,7 +169,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (session === s) session = null
     }
 
-    private fun cancelSession() { session?.let { cancel(it) } }
+    private fun cancelSession() { queue.clear(); queueTotal = 0; session?.let { cancel(it) } }
 
     val isWorking: Boolean get() = session?.job?.isActive == true
 
@@ -275,22 +275,74 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     /** Başka uygulamadan paylaşılan / "Birlikte aç" ile gelen ses. */
-    fun onSharedAudio(uri: Uri) = startAudio(uri, shared = true)
+    fun onSharedAudio(uri: Uri) { queue.clear(); queueTotal = 0; startAudio(uri, shared = true) }
 
     /** Uygulama içinden (dosya seçici) seçilen ses. */
-    fun onAudio(uri: Uri) = startAudio(uri, shared = false)
+    fun onAudio(uri: Uri) { queue.clear(); queueTotal = 0; startAudio(uri, shared = false) }
+
+    // --- Çoklu paylaşım: sesler sırayla dökülür, her biri ayrı not olur ---
+    private val queue = ArrayDeque<Uri>()
+    private var queueTotal = 0
+    private var queueFailed = 0
+
+    /** Birden çok ses birlikte paylaşıldı (en fazla [MAX_QUEUE]); ilki hemen, kalanı sırayla. */
+    fun onSharedAudios(uris: List<Uri>) {
+        val list = uris.take(MAX_QUEUE)
+        if (list.isEmpty()) return
+        queue.clear()
+        queue.addAll(list.drop(1))
+        queueTotal = if (list.size > 1) list.size else 0
+        queueFailed = 0
+        startAudio(list.first(), shared = true)
+    }
+
+    /** Sıradaki ses bitti (başarı ya da hata): kuyrukta varsa sonrakine geç, yoksa özet göster. */
+    private fun onQueueItemDone() {
+        if (queueTotal == 0) return
+        if (state.value.phase is Phase.Failed) queueFailed++
+        val next = queue.removeFirstOrNull()
+        if (next != null) { startAudio(next, shared = false, queued = true); return }
+        val total = queueTotal
+        val failed = queueFailed
+        queueTotal = 0
+        toast(
+            if (failed == 0) tx("{0} ses yazıya döküldü; hepsi notlarında", total)
+            else tx("{0} ses yazıya döküldü, {1} ses dökülemedi", total - failed, failed),
+        )
+    }
+
+    /** Hata ekranında tek dokunuşla denenecek diller: telefon dili ve İngilizce (şu ankinden farklıysa). */
+    fun suggestedLangs(): List<Lang> {
+        val cur = state.value.lang
+        return listOfNotNull(langOf(Locale.getDefault().language), Lang.EN)
+            .filter { it != cur && it != Lang.AUTO && WitEngine.supports(it.code) }
+            .distinct().take(2)
+    }
+
+    /** Paylaşılan metne (ayar açıksa) uygulama imzası ekler. */
+    fun withSignature(text: String): String {
+        if (!prefs.shareSignature) return text
+        val app = ctx.getString(R.string.app_name)
+        return text + "\n\n— " + tx("{0} ile yazıya döküldü", app) +
+            "\nhttps://play.google.com/store/apps/details?id=" + ctx.packageName
+    }
 
     /** Kopyala, çöz, hemen Wit ile yazıya dök. Önceki her işi iptal eder. */
-    private fun startAudio(uri: Uri, shared: Boolean) {
+    private fun startAudio(uri: Uri, shared: Boolean, queued: Boolean = false) {
         adAtAppOpen = shared
         val s = newSession()
+        if (queued) s.adRequested = true // kuyruktaki sesler arasında tam ekran reklam yok
         translateJob?.cancel()
         stopPlayback()
         audio = null            // eski ses: yeni dosya başarısız olursa "Tekrar dene" onu dökmesin
         player.setSource(null)
         _state.update {
             it.copy(
-                phase = Phase.Preparing(tx("Ses hazırlanıyor…")), result = null, previousResult = null,
+                phase = Phase.Preparing(
+                    if (queueTotal > 1) tx("Ses hazırlanıyor… ({0}/{1})", queueTotal - queue.size, queueTotal)
+                    else tx("Ses hazırlanıyor…"),
+                ),
+                result = null, previousResult = null,
                 fileName = null, audioMs = 0, waveform = FloatArray(0), hasAudio = false, positionMs = 0,
                 live = emptyList(), livePartial = null, tab = Tab.TEXT, translation = null, translating = null,
                 refining = null, importRequestId = it.importRequestId + 1,
@@ -343,6 +395,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 dropOwnCopy(s)
                 s.update { it.copy(phase = Phase.Failed(tx("Ses açılamadı: {0}", t.message ?: t.javaClass.simpleName))) }
             }
+            // Buraya yalnız iş bittiğinde gelinir (iptalde CancellationException yukarı fırlar)
+            if (s.alive()) onQueueItemDone()
         }
     }
 
@@ -673,6 +727,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Çalışan işi iptal eder. Yeniden döküm iptalinde önceki not geri gelir. */
     fun cancelWork() {
         val s = session ?: return
+        queue.clear(); queueTotal = 0
         cancel(s)
         _state.update {
             val prev = it.previousResult
@@ -913,5 +968,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         super.onCleared()
     }
 
-    private companion object { const val MAX_FILE_MB = 500 }
+    private companion object {
+        const val MAX_FILE_MB = 500
+        const val MAX_QUEUE = 10
+    }
 }

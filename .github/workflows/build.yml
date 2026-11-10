@@ -37,7 +37,10 @@ jobs:
               sys.exit("WIT_TOKENS geçerli JSON değil")
           if not isinstance(v, dict) or not v:
               sys.exit("WIT_TOKENS boş ya da nesne değil")
-          bad = [k for k, t in v.items() if k not in known or not isinstance(t, str) or not t.strip() or any(c.isspace() for c in t)]
+          def ok(t):
+              return isinstance(t, str) and bool(t.strip()) and not any(c.isspace() for c in t)
+          # Değer tek anahtar ("tr":"...") ya da anahtar havuzu ("tr":["...","..."]) olabilir
+          bad = [k for k, t in v.items() if k not in known or not (ok(t) or (isinstance(t, list) and t and all(ok(x) for x in t)))]
           if bad:
               sys.exit("WIT_TOKENS hatalı girdi: " + ", ".join(sorted(bad)))
           missing = sorted(known - set(v))
@@ -81,6 +84,7 @@ jobs:
           ADMOB_INTERSTITIAL_ID: ${{ secrets.ADMOB_INTERSTITIAL_ID }}
           ADMOB_NATIVE_ID: ${{ secrets.ADMOB_NATIVE_ID }}
           ADMOB_APP_OPEN_ID: ${{ secrets.ADMOB_APP_OPEN_ID }}
+          ADMOB_REWARDED_ID: ${{ secrets.ADMOB_REWARDED_ID }}
           ADMOB_TEST_DEVICE_IDS: ${{ secrets.ADMOB_TEST_DEVICE_IDS }}
         run: |
           chmod +x gradlew

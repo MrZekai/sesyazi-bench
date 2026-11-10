@@ -16,6 +16,8 @@ import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.appopen.AppOpenAd
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import com.google.android.gms.ads.rewarded.RewardedAd
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
@@ -32,6 +34,7 @@ object Ads {
     val INTERSTITIAL_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_INTERSTITIAL
     val NATIVE_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_NATIVE
     val APP_OPEN_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_APP_OPEN
+    val REWARDED_ID: String = com.aitolian.sesyazibench.BuildConfig.ADMOB_REWARDED
 
     // Geçiş reklamı sınırları (her döküm başında denenir; bu sınırlar aşırılığı önler)
     private const val MIN_GAP_MS = 60_000L          // iki reklam arası en az 60 sn
@@ -53,9 +56,62 @@ object Ads {
     private val main = Handler(Looper.getMainLooper())
     private const val PREFS = "ads"
     private const val KEY_TIMES = "shown_times"
+    private const val KEY_FREE_UNTIL = "ad_free_until"
+    private const val AD_FREE_MS = 24 * 3_600_000L
+
+    private val _adFree = MutableStateFlow(false)
+    /** Ödüllü reklamla kazanılan reklamsız süre içinde mi (banner / native / tam ekran gösterilmez). */
+    val adFree: StateFlow<Boolean> = _adFree
+
+    private fun adFreeUntil(context: Context): Long =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_FREE_UNTIL, 0L)
+
+    /** Saat geri alınırsa süre uzamasın: bitiş en fazla 24 saat ileride sayılır. */
+    private fun isAdFree(context: Context): Boolean {
+        val left = adFreeUntil(context) - System.currentTimeMillis()
+        return left in 1..AD_FREE_MS
+    }
+
+    fun adFreeHoursLeft(context: Context): Int {
+        val left = (adFreeUntil(context) - System.currentTimeMillis()).coerceIn(0L, AD_FREE_MS)
+        return ((left + 3_599_999L) / 3_600_000L).toInt()
+    }
+
+    /**
+     * Ödüllü reklam: sonuna kadar izlenirse 24 saat reklam gösterilmez.
+     * [onResult] ana iş parçacığında: true = ödül kazanıldı, false = erken kapatıldı, null = reklam yüklenemedi.
+     */
+    fun showRewarded(activity: Activity, onResult: (Boolean?) -> Unit) {
+        if (!_ready.value) { onResult(null); return }
+        RewardedAd.load(
+            activity, REWARDED_ID, AdRequest.Builder().build(),
+            object : RewardedAdLoadCallback() {
+                override fun onAdLoaded(ad: RewardedAd) {
+                    if (activity.isFinishing || activity.isDestroyed) { onResult(null); return }
+                    var earned = false
+                    ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                        override fun onAdDismissedFullScreenContent() { onResult(earned) }
+                        override fun onAdFailedToShowFullScreenContent(error: AdError) { onResult(null) }
+                    }
+                    ad.show(activity) { _ ->
+                        earned = true
+                        val appCtx = activity.applicationContext
+                        appCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                            .putLong(KEY_FREE_UNTIL, System.currentTimeMillis() + AD_FREE_MS).apply()
+                        _adFree.value = true
+                    }
+                }
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    Log.w("Ads", "rewarded load: ${error.message}")
+                    onResult(null)
+                }
+            },
+        )
+    }
 
     /** UMP rıza akışı (AB/UK) → ardından MobileAds başlatılır. */
     fun start(activity: Activity) {
+        _adFree.value = isAdFree(activity)
         val consent: ConsentInformation = UserMessagingPlatform.getConsentInformation(activity)
         consent.requestConsentInfoUpdate(
             activity,
@@ -177,6 +233,8 @@ object Ads {
         timeoutMs: Long = 5_000,
     ) {
         fun loaded() = if (atAppOpen) freshAppOpen() != null else interstitial != null
+        _adFree.value = isAdFree(activity) // süre dolduysa reklamlar geri gelir
+        if (_adFree.value) return
         var waited = 0L
         while (!_ready.value && waited < timeoutMs) {
             if (!stillWanted()) return

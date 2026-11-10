@@ -457,5 +457,33 @@ internal object I18n {
             "Choose {0} from the list",
         "Metin hemen hazırlanır. Bir sonraki sefer listede ilk sıralarda olur." to
             "The text is prepared right away. Next time it appears near the top of the list.",
+        "{0} ses yazıya döküldü; hepsi notlarında" to
+            "{0} audio files transcribed; all are in your notes",
+        "{0} ses yazıya döküldü, {1} ses dökülemedi" to
+            "{0} audio files transcribed, {1} failed",
+        "{0} ile yazıya döküldü" to
+            "Transcribed with {0}",
+        "Ses hazırlanıyor… ({0}/{1})" to
+            "Preparing audio… ({0}/{1})",
+        "Konuşma başka dilde mi? Tek dokunuşla dene:" to
+            "Is the speech in another language? Try with one tap:",
+        "Paylaşırken imza ekle" to
+            "Add a signature when sharing",
+        "Paylaştığın metnin altına uygulamanın adı ve bağlantısı eklenir." to
+            "The app's name and link are added below the text you share.",
+        "Reklamsız kullanım" to
+            "Ad-free use",
+        "Reklamlar kapalı. Kalan süre: yaklaşık {0} saat." to
+            "Ads are off. Time left: about {0} hours.",
+        "Kısa bir reklam izle, 24 saat boyunca hiç reklam görme." to
+            "Watch one short ad and see no ads for 24 hours.",
+        "Reklam izle · 24 saat reklamsız" to
+            "Watch an ad · 24 hours ad-free",
+        "24 saat boyunca reklam yok. Teşekkürler!" to
+            "No ads for 24 hours. Thank you!",
+        "Ödül için reklamı sonuna kadar izlemen gerekiyor." to
+            "Watch the ad to the end to get the reward.",
+        "Reklam şu an yüklenemedi. Biraz sonra tekrar dene." to
+            "The ad couldn't load right now. Try again shortly.",
     )
 }

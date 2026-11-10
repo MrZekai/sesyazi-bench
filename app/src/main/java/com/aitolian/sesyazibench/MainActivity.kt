@@ -92,7 +92,20 @@ class MainActivity : ComponentActivity() {
             return
         }
         val action = intent?.action
-        if (intent == null || (action != Intent.ACTION_SEND && action != Intent.ACTION_VIEW)) return
+        if (intent == null) return
+        if (action == Intent.ACTION_SEND_MULTIPLE) {
+            val list: ArrayList<Uri>? = if (Build.VERSION.SDK_INT >= 33) {
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION") intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+            }
+            if (!list.isNullOrEmpty()) {
+                ShareIntegration.reportUsed(this)
+                vm.onSharedAudios(list)
+            }
+            return
+        }
+        if (action != Intent.ACTION_SEND && action != Intent.ACTION_VIEW) return
         val uri: Uri? = if (action == Intent.ACTION_VIEW) {
             intent.data // "Birlikte aç"
         } else if (Build.VERSION.SDK_INT >= 33) {

@@ -19,6 +19,11 @@ Sesli mesajı, ses dosyasını ya da videonun sesini yazıya döker. Görünen a
   uygulama açılış (app open) reklamı, uygulama içinden dosya seçildiyse geçiş reklamı gösterilir
   (AdMob: uygulama yüklenirken geçiş reklamı yasak).
 - Arayüz dili: kaynak metinler kodda Türkçe; `I18n.kt` tablosu ile İngilizce (`tx("…")`). Yeni dil = yeni tablo.
+- Wit anahtar havuzu: `WIT_TOKENS` değerleri tek anahtar ya da liste olabilir (`{"tr":["…","…"],"en":"…"}`).
+  Cihaz havuzdan rastgele bir anahtarla başlar; kota (429) ya da yetki hatasında sıradakine geçer.
+- Çoklu paylaşım: en fazla 10 ses birlikte paylaşılabilir; sırayla dökülür, her biri ayrı not olur.
+- Hata kartında tek dokunuşla başka dilde deneme (telefon dili / İngilizce).
+- Paylaşım imzası (Ayarlar'dan kapatılır) ve ödüllü reklamla 24 saat reklamsız kullanım (Ayarlar).
 - Uygulama içi puanlama: sorunsuz 3., 12. ve 30. dökümden sonra, not kapatılırken (Play In-App Review).
 - Kendi sunucumuz yok. Notlar cihazda (en fazla 50).
 

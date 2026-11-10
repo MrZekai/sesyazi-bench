@@ -18,6 +18,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -27,6 +28,7 @@ import java.net.UnknownHostException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Hızlı mod: Meta Wit.ai /dictation (ücretsiz, ticari kullanım dahil).
@@ -47,9 +49,26 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - Hata metinleri sabit kodlardır (sunucu yanıt gövdesi saklanmaz/loglanmaz).
  */
 class WitEngine(
-    private val token: String,
+    /** Bu dilin anahtar havuzu (en az bir). Kota (429) ya da yetki (401/403) hatasında sıradakine geçilir. */
+    private val keys: List<String>,
     private val connector: WitConnector = WitConnector.Default,
 ) {
+    constructor(token: String, connector: WitConnector = WitConnector.Default) : this(listOf(token), connector)
+
+    private val keyIndex = AtomicInteger(0)
+    private val rotations = AtomicInteger(0)
+
+    /**
+     * [idx] numaralı anahtar kota/yetki hatası verdi: havuzda denenmemiş anahtar varsa ona geçer.
+     * true → parça yeni anahtarla hemen yeniden denenebilir.
+     */
+    private fun rotateFrom(idx: Int): Boolean {
+        if (keys.size < 2) return false
+        if (keyIndex.get() != idx) return true              // başka parça zaten sıradaki anahtara geçti
+        if (rotations.get() >= keys.size - 1) return false  // bütün anahtarlar denendi
+        if (keyIndex.compareAndSet(idx, idx + 1)) rotations.incrementAndGet()
+        return true
+    }
 
     /** HTTP bağlantısı açıcı (testlerde sahte yanıt için değiştirilir). */
     fun interface WitConnector {
@@ -135,17 +154,26 @@ class WitEngine(
         const val ERR_SERVICE = WIT_ERR_SERVICE
         const val ERR_EMPTY = WIT_ERR_EMPTY
 
-        /** Derlemede gelen dil → anahtar eşlemesi; geçersiz girdiler tek tek atlanır. */
-        val tokens: Map<String, String> by lazy {
+        /**
+         * Derlemede gelen dil → anahtar havuzu. Değer tek anahtar ("tr":"…") ya da
+         * liste ("tr":["…","…"]) olabilir; geçersiz girdiler tek tek atlanır.
+         */
+        val tokens: Map<String, List<String>> by lazy {
             val o = runCatching { JSONObject(BuildConfig.WIT_TOKENS.ifBlank { "{}" }) }.getOrNull() ?: return@lazy emptyMap()
             o.keys().asSequence().mapNotNull { k ->
-                val v = o.optString(k).trim()
-                if (v.isEmpty() || v.any { it.isWhitespace() }) null else k to v
+                val raw = o.opt(k)
+                val list = when (raw) {
+                    is String -> listOf(raw)
+                    is JSONArray -> (0 until raw.length()).mapNotNull { raw.opt(it) as? String }
+                    else -> emptyList()
+                }.map { it.trim() }.filter { v -> v.isNotEmpty() && v.none { it.isWhitespace() } }.distinct()
+                if (list.isEmpty()) null else k to list
             }.toMap()
         }
 
         fun supports(langCode: String): Boolean = tokens.containsKey(langCode)
-        fun forLang(langCode: String): WitEngine? = tokens[langCode]?.let { WitEngine(it) }
+        /** Havuz karıştırılır: cihazlar farklı anahtardan başlar, kota anahtarlar arasında dağılır. */
+        fun forLang(langCode: String): WitEngine? = tokens[langCode]?.let { WitEngine(it.shuffled()) }
 
         // Uygulama genelinde istek zamanlayıcısı: başlangıç aralığı + 429 sonrası bekleme
         private val startLock = Mutex()
@@ -323,8 +351,9 @@ class WitEngine(
             if (cancel.get()) return ChunkOutcome.Failure(ERR_CANCELLED)
             if (authDead.get()) return ChunkOutcome.Failure(ERR_AUTH)
             awaitStartSlot()
+            val keyAt = keyIndex.get()
             try {
-                val segs = postChunk(body, offsetMs, durMs, cancel, diag, onLive)
+                val segs = postChunk(keys[keyAt % keys.size], body, offsetMs, durMs, cancel, diag, onLive)
                 diag.codes += "OK"
                 return ChunkOutcome.Success(segs)
             } catch (e: CancellationException) {
@@ -334,8 +363,12 @@ class WitEngine(
                 diag.codes += e.code
                 onLive(emptyList(), null)
                 when (e.code) {
-                    ERR_AUTH -> { authDead.set(true); return ChunkOutcome.Failure(ERR_AUTH) }
+                    ERR_AUTH -> {
+                        if (rotateFrom(keyAt)) return@repeat // havuzdaki sıradaki anahtarla dene
+                        authDead.set(true); return ChunkOutcome.Failure(ERR_AUTH)
+                    }
                     ERR_RATE -> {
+                        if (rotateFrom(keyAt)) return@repeat // bu anahtarın kotası doldu: sıradakiyle hemen dene
                         // Sunucu 15 sn'den uzun bekle diyorsa erken tekrar yok: yoğunluk hatası
                         val asked = e.retryAfterMs
                         if (asked != null && asked > MAX_RATE_WAIT_MS) return ChunkOutcome.Failure(ERR_RATE)
@@ -381,7 +414,7 @@ class WitEngine(
      * kapatır (engelleyen read/write'ı hemen keser).
      */
     private suspend fun postChunk(
-        body: ByteArray, offsetMs: Long, durMs: Long, cancel: AtomicBoolean, diag: ChunkDiag,
+        token: String, body: ByteArray, offsetMs: Long, durMs: Long, cancel: AtomicBoolean, diag: ChunkDiag,
         onLive: (List<String>, String?) -> Unit,
     ): List<Segment> = coroutineScope {
         val conn = connector.open().apply {
