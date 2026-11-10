@@ -1,0 +1,317 @@
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	﻿2026-09-25T12:43:41.1148181Z ##[group]Run chmod +x gradlew
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1148577Z ^[[36;1mchmod +x gradlew^[[0m
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1148942Z ^[[36;1m./gradlew :app:testReleaseUnitTest --stacktrace^[[0m
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1185640Z shell: /usr/bin/bash -e {0}
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1185960Z env:
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1186314Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1186844Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1187305Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1187832Z   GRADLE_USER_HOME: /home/runner/.gradle
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1188201Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1188551Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1189033Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1189557Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1189924Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:41.1190288Z ##[endgroup]
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:43:46.1478161Z Starting a Gradle Daemon (subsequent builds will be faster)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:08.6479321Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:08.6481123Z > Configure project :app
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:08.6494616Z Checking the license for package NDK (Side by side) 27.2.12479018 in /usr/local/lib/android/sdk/licenses
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:08.6495749Z License for package NDK (Side by side) 27.2.12479018 accepted.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:08.6496594Z Preparing "Install NDK (Side by side) 27.2.12479018 v.27.2.12479018".
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:20.3475165Z "Install NDK (Side by side) 27.2.12479018 v.27.2.12479018" ready.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:20.3476373Z Installing NDK (Side by side) 27.2.12479018 in /usr/local/lib/android/sdk/ndk/27.2.12479018
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:20.3478962Z "Install NDK (Side by side) 27.2.12479018 v.27.2.12479018" complete.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:20.7478181Z "Install NDK (Side by side) 27.2.12479018 v.27.2.12479018" finished.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.3473334Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.3478867Z > Task :app:buildKotlinToolingMetadata
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.3480018Z > Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.3480877Z > Task :app:preBuild UP-TO-DATE
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.3481641Z > Task :app:preReleaseBuild UP-TO-DATE
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.4474918Z > Task :app:generateReleaseBuildConfig
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.8478708Z > Task :app:generateReleaseResValues
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.8508472Z > Task :app:checkReleaseAarMetadata
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.9474782Z > Task :app:mapReleaseSourceSetPaths
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:22.9476765Z > Task :app:generateReleaseResources
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:24.5488663Z > Task :app:packageReleaseResources
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.3474295Z > Task :app:createReleaseCompatibleScreenManifests
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.3481037Z > Task :app:extractDeepLinksRelease
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.4474400Z > Task :app:mergeReleaseResources
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.4475507Z > Task :app:parseReleaseLocalResources
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.7489422Z > Task :app:processReleaseMainManifest
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.9498851Z > Task :app:processReleaseManifest
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.9528539Z > Task :app:preReleaseUnitTestBuild UP-TO-DATE
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.9558405Z > Task :app:javaPreCompileRelease
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.9588469Z > Task :app:javaPreCompileReleaseUnitTest
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:25.9589275Z > Task :app:processReleaseManifestForPackage
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:26.6474855Z > Task :app:processReleaseResources
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.7499637Z e: file:///home/runner/work/sesyazi-bench/sesyazi-bench/app/src/main/java/com/aitolian/sesyazibench/ads/NativeAdCard.kt:92:47 This type is final, so it cannot be extended.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.7500880Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.7548740Z > Task :app:compileReleaseKotlin FAILED
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8518737Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8540210Z FAILURE: Build failed with an exception.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8541361Z gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1790340233047.json
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8598691Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8624260Z * What went wrong:
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8648619Z Execution failed for task ':app:compileReleaseKotlin'.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8653827Z > A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8655176Z 18 actionable tasks: 18 executed
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8656099Z    > Compilation error. See log for more details
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8656665Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8657011Z * Try:
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8657796Z > Run with --info or --debug option to get more log output.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8658570Z > Run with --scan to get full insights.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8659297Z > Get more help at https://help.gradle.org.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8659837Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8660166Z * Exception is:
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8661167Z org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileReleaseKotlin'.
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8662917Z 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:130)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8664480Z 	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:293)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8665994Z 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:128)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8668076Z 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8670035Z 	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8672247Z 	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8674285Z 	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8676286Z 	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8678334Z 	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8680139Z 	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8681940Z 	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8683668Z 	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8685375Z 	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8687367Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8689742Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8691702Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8693487Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8695293Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8697193Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8699110Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8700867Z 	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8702808Z 	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8704504Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8706657Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8709057Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8711070Z 	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8713043Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8715367Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8717316Z 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8718866Z 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8724302Z 	at org.gradle.execution.plan.DefaultPlanExecutor.process(DefaultPlanExecutor.java:111)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8725962Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.executeWithServices(DefaultTaskExecutionGraph.java:138)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8727798Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.execute(DefaultTaskExecutionGraph.java:123)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8729270Z 	at org.gradle.execution.SelectedTaskExecutionAction.execute(SelectedTaskExecutionAction.java:35)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8730607Z 	at org.gradle.execution.DryRunBuildExecutionAction.execute(DryRunBuildExecutionAction.java:51)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8732310Z 	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:54)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8734373Z 	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:43)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8736214Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8739163Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8741232Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8743026Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8744901Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8746749Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8748624Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8750532Z 	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor.execute(BuildOperationFiringBuildWorkerExecutor.java:40)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8752668Z 	at org.gradle.internal.build.DefaultBuildLifecycleController.lambda$executeTasks$10(DefaultBuildLifecycleController.java:313)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8754605Z 	at org.gradle.internal.model.StateTransitionController.doTransition(StateTransitionController.java:266)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8756447Z 	at org.gradle.internal.model.StateTransitionController.lambda$tryTransition$8(StateTransitionController.java:177)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8758127Z 	at org.gradle.internal.work.DefaultSynchronizer.withLock(DefaultSynchronizer.java:46)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8759578Z 	at org.gradle.internal.model.StateTransitionController.tryTransition(StateTransitionController.java:177)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8761862Z 	at org.gradle.internal.build.DefaultBuildLifecycleController.executeTasks(DefaultBuildLifecycleController.java:304)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8764021Z 	at org.gradle.internal.build.DefaultBuildWorkGraphController$DefaultBuildWorkGraph.runWork(DefaultBuildWorkGraphController.java:220)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8765963Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:263)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8767947Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:127)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8769609Z 	at org.gradle.composite.internal.DefaultBuildController.doRun(DefaultBuildController.java:181)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8771166Z 	at org.gradle.composite.internal.DefaultBuildController.access$000(DefaultBuildController.java:50)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8772970Z 	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.lambda$run$0(DefaultBuildController.java:198)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8774745Z 	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8776450Z 	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.run(DefaultBuildController.java:198)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8778358Z 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8780031Z 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8782435Z Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8785192Z 	at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:287)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8787157Z 	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:130)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8788643Z 	at org.gradle.internal.Factories$1.create(Factories.java:31)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8848841Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocks(DefaultWorkerLeaseService.java:335)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8850495Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocks(DefaultWorkerLeaseService.java:318)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8879127Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLock(DefaultWorkerLeaseService.java:323)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8895224Z 	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:126)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8925090Z 	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:92)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8932245Z 	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForAll(DefaultAsyncWorkTracker.java:78)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8934105Z 	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForCompletion(DefaultAsyncWorkTracker.java:66)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8935726Z 	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:252)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8937405Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8939419Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8951902Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8953666Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8955315Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8960278Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8962877Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8964966Z 	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:229)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8966639Z 	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:212)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8968653Z 	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:195)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8976745Z 	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:162)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8978431Z 	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8979580Z 	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8980639Z 	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8981665Z 	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8983399Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8985950Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8988309Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8990204Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8992181Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8994030Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8995883Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8997462Z 	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.8998867Z 	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9000406Z 	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9002167Z 	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9003682Z 	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9005371Z 	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9007314Z 	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9009178Z 	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9011069Z 	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9012977Z 	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9014975Z 	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9017037Z 	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9019460Z 	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9021544Z 	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9024948Z 	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9027341Z 	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9029246Z 	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:75)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9030545Z 	at org.gradle.internal.Either$Right.fold(Either.java:175)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9031714Z 	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9033067Z 	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9034494Z 	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9036029Z 	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9037916Z 	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9052733Z 	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9080715Z 	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9108732Z 	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9150670Z 	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9207846Z 	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9213429Z 	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9239016Z 	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9267402Z 	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9298908Z 	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9306954Z 	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9338758Z 	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9352702Z 	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9388634Z 	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:107)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9407827Z 	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:56)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9422168Z 	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9449028Z 	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9478973Z 	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9508829Z 	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:61)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9538975Z 	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9579288Z 	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9599139Z 	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9639458Z 	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9668951Z 	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9671014Z 	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9672753Z 	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9698756Z 	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9700497Z 	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9702256Z 	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9703789Z 	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9705151Z 	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9707011Z 	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9709377Z 	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9711445Z 	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9713215Z 	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9714612Z 	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9715957Z 	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9717202Z 	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9718716Z 	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:64)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9720500Z 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9722412Z 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9724426Z 	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9726564Z 	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9759022Z 	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9761050Z 	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9762779Z 	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9764453Z 	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9766184Z 	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9767501Z 	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9769116Z 	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9770878Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9772874Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9775045Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9776793Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9778577Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9780166Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9781649Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9783177Z 	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9784601Z 	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9786126Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9818362Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9820592Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9822497Z 	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9824351Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9826580Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9828490Z 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9829931Z 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9831259Z 	at org.gradle.execution.plan.DefaultPlanExecutor.process(DefaultPlanExecutor.java:111)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9832800Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.executeWithServices(DefaultTaskExecutionGraph.java:138)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9834454Z 	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph.execute(DefaultTaskExecutionGraph.java:123)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9835995Z 	at org.gradle.execution.SelectedTaskExecutionAction.execute(SelectedTaskExecutionAction.java:35)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9837482Z 	at org.gradle.execution.DryRunBuildExecutionAction.execute(DryRunBuildExecutionAction.java:51)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9839419Z 	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:54)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9841422Z 	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor$ExecuteTasks.call(BuildOperationFiringBuildWorkerExecutor.java:43)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9843472Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9845562Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9847446Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9891349Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9893010Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9894751Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9896714Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9898614Z 	at org.gradle.execution.BuildOperationFiringBuildWorkerExecutor.execute(BuildOperationFiringBuildWorkerExecutor.java:40)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9900718Z 	at org.gradle.internal.build.DefaultBuildLifecycleController.lambda$executeTasks$10(DefaultBuildLifecycleController.java:313)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9902487Z 	at org.gradle.internal.model.StateTransitionController.doTransition(StateTransitionController.java:266)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9904171Z 	at org.gradle.internal.model.StateTransitionController.lambda$tryTransition$8(StateTransitionController.java:177)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9905683Z 	at org.gradle.internal.work.DefaultSynchronizer.withLock(DefaultSynchronizer.java:46)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9907115Z 	at org.gradle.internal.model.StateTransitionController.tryTransition(StateTransitionController.java:177)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9909667Z 	at org.gradle.internal.build.DefaultBuildLifecycleController.executeTasks(DefaultBuildLifecycleController.java:304)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9911626Z 	at org.gradle.internal.build.DefaultBuildWorkGraphController$DefaultBuildWorkGraph.runWork(DefaultBuildWorkGraphController.java:220)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9913468Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:263)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9915055Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:127)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9916631Z 	at org.gradle.composite.internal.DefaultBuildController.doRun(DefaultBuildController.java:181)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9918244Z 	at org.gradle.composite.internal.DefaultBuildController.access$000(DefaultBuildController.java:50)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9919854Z 	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.lambda$run$0(DefaultBuildController.java:198)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9921498Z 	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9923082Z 	at org.gradle.composite.internal.DefaultBuildController$BuildOpRunnable.run(DefaultBuildController.java:198)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9924716Z 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9926208Z 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9927918Z Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilation error. See log for more details
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9929416Z 	at org.jetbrains.kotlin.gradle.tasks.TasksUtilsKt.throwExceptionIfCompilationFailed(tasksUtils.kt:21)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9931017Z 	at org.jetbrains.kotlin.compilerRunner.GradleKotlinCompilerWork.run(GradleKotlinCompilerWork.kt:119)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9932994Z 	at org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction.execute(GradleCompilerRunnerWithWorkers.kt:74)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9934810Z 	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:63)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9936248Z 	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:66)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9938082Z 	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:62)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9939614Z 	at org.gradle.internal.classloader.ClassLoaderUtils.executeInClassloader(ClassLoaderUtils.java:100)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9941211Z 	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.lambda$execute$0(NoIsolationWorkerFactory.java:62)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9942545Z 	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:44)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9943651Z 	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:41)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9945280Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9948106Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9950270Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9952082Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9953905Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9955655Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9957205Z 	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9958927Z 	at org.gradle.workers.internal.AbstractWorker.executeWrappedInBuildOperation(AbstractWorker.java:41)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9960492Z 	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.execute(NoIsolationWorkerFactory.java:59)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9961938Z 	at org.gradle.workers.internal.DefaultWorkerExecutor.lambda$submitWork$0(DefaultWorkerExecutor.java:174)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9963723Z 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runExecution(DefaultConditionalExecutionQueue.java:194)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9965407Z 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.access$700(DefaultConditionalExecutionQueue.java:127)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9967092Z 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner$1.run(DefaultConditionalExecutionQueue.java:169)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9968626Z 	at org.gradle.internal.Factories$1.create(Factories.java:31)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9969813Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:263)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9971341Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:127)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9972959Z 	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:132)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9974685Z 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:164)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9976508Z 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:133)
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9977893Z 	... 2 more
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9978122Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9978146Z 
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:39.9978336Z BUILD FAILED in 58s
+apk	Birim testleri (Wit ayrıştırıcı, ses dönüştürme, okuma birimleri)	2026-09-25T12:44:40.3110216Z ##[error]Process completed with exit code 1.
