@@ -1,13 +1,13 @@
-# Play Console kapalı test kontrol listesi — MuteRead
+# Play Console kapalı test kontrol listesi — SnapScribe
 
-Paket: `com.aitolian.muteread` · Gizlilik politikası: https://mrzekai.github.io/muteread-privacy.html
-(Kaynak: `store/muteread-privacy.html`; ayrı Pages deposuna (MrZekai/mrzekai.github.io) elle kopyalanıp itilir. Kasım 2026 denetiminde yayındaki sayfa 25 Eylül tarihli, depodaki 26 Eylül: yeniden yayınla. **Yayında olduğunu tarayıcıda, gizli sekmede aç ve HTTP 200 + doğru paket adıyla doğrula** — yerel dosya kanıt değildir.)
+Paket: `com.aitolian.snapscribe` · Gizlilik politikası: https://mrzekai.github.io/snapscribe-privacy.html
+(Kaynak: `store/snapscribe-privacy.html`; ayrı Pages deposuna (MrZekai/mrzekai.github.io) elle kopyalanıp itilir. Ad SnapScribe olunca dosya `snapscribe-privacy.html` oldu: Pages deposuna bu adla kopyalanmadan uygulamadaki bağlantı açılmaz. **Yayında olduğunu tarayıcıda, gizli sekmede aç ve HTTP 200 + doğru paket adıyla doğrula** — yerel dosya kanıt değildir.)
 
 ## 1. Uygulama içeriği (App content)
 
 | Bölüm | Cevap |
 |---|---|
-| Gizlilik politikası | `https://mrzekai.github.io/muteread-privacy.html` |
+| Gizlilik politikası | `https://mrzekai.github.io/snapscribe-privacy.html` |
 | Reklamlar | Evet, reklam içeriyor |
 | Uygulama erişimi | Tüm işlevler giriş gerektirmeden kullanılabilir |
 | Hedef kitle | 13+ (çocuklara yönelik değil) |
@@ -53,7 +53,7 @@ v1.24'ten itibaren yayın paketi R8 ile küçültülür: yüklemeden önce CI AP
 ## 4. Mağaza görselleri (gerçek ekranlardan, TR ve EN)
 
 1. "Dinleyemiyorsan, oku." — büyük, okunur bir transkript.
-2. "Paylaş → MuteRead → Oku." — gerçek paylaşım akışı (WhatsApp logosu YOK).
+2. "Paylaş → SnapScribe → Oku." — gerçek paylaşım akışı (WhatsApp logosu YOK).
 3. "Kopyala, düzelt, sakla." — not düzenleme ve arama.
 4. "Metni kendi dilinde oku." — çeviri (kaliteyi abartmadan).
 5. "Saniyeler içinde." — gerçek bir dökümün süre satırı (ör. "⚡ 2,8 sn"), ölçülmüş değer.
@@ -63,7 +63,7 @@ Kullanma: "%100 doğru", "en iyi", sahte yıldız/yorum, ölçülmemiş süre, "
 ASO denetimi (marketing-skills:aso) ekleri:
 
 - **Öne çıkan görsel (feature graphic) zorunlu:** tam 1024 × 500 px, JPEG ya da 24 bit PNG (alfa yok). Yoksa öne çıkarma yerleşimlerine girilemez.
-- **Sıra:** kullanıcıların çoğu 3. görselden sonrasına bakmaz. İlk üç görsel ana hikâyeyi taşımalı: 1) Dinleyemiyorsan oku, 2) Paylaş → MuteRead → Oku, 3) Saniyeler içinde (şimdiki 5. görsel 3. sıraya).
+- **Sıra:** kullanıcıların çoğu 3. görselden sonrasına bakmaz. İlk üç görsel ana hikâyeyi taşımalı: 1) Dinleyemiyorsan oku, 2) Paylaş → SnapScribe → Oku, 3) Saniyeler içinde (şimdiki 5. görsel 3. sıraya).
 - **Adet:** en az 5, en fazla 8 telefon görseli; önerilen 1080 × 1920, her görselde tek mesaj, 5–7 kelimelik başlık.
 - **Simge:** 512 × 512, 32 bit PNG; içinde yazı olmasın. Simge zemini hâlâ mor (`ic_bg` #7C5CFF), uygulama vurgusu mavi (#3B5BDB): bilinçli değilse eşitle.
 - **Tanıtım videosu:** 30 sn – 2 dk YouTube bağlantısı; sessiz otomatik oynayabildiği için ilk saniyelerde paylaş → metin akışı sessiz anlaşılmalı. İsteğe bağlı, yayından sonra deneyle ölç.

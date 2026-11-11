@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         // Mağaza kimliği: Play'de yayınlandıktan sonra DEĞİŞTİRİLEMEZ. Kod paketi (namespace) ayrı; kullanıcı görmez.
-        applicationId = "com.aitolian.muteread"
+        applicationId = "com.aitolian.snapscribe"
         minSdk = 26
         targetSdk = 36
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()

@@ -18,6 +18,7 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:largeHeap="true"
+        android:supportsRtl="true"
         android:theme="@style/Theme.SesYaziBench">
 
         <!-- AdMob uygulama kimliği derlemeden gelir (app/build.gradle.kts): secret yoksa Google test kimliği -->

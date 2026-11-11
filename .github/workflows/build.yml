@@ -1,4 +1,4 @@
-name: Build MuteRead (APK + AAB)
+name: Build SnapScribe (APK + AAB)
 
 on:
   push:

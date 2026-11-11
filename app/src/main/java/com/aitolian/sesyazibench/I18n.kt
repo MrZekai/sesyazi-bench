@@ -3,19 +3,36 @@ package com.aitolian.sesyazibench
 import java.util.Locale
 
 /*
- * Arayüz dili. Kaynak metinler kodda Türkçe durur; telefon dili Türkçe değilse
- * aşağıdaki tablodan karşılığı gösterilir (şimdilik İngilizce; yeni dil = yeni tablo).
- * Tabloda olmayan metin Türkçe kalır (çökme yok). Yer tutucular: {0}, {1}, …
+ * Arayüz dili. Kaynak metinler kodda Türkçe durur; telefon dili Türkçe değilse o dilin
+ * tablosundan (I18nTables), tablosu olmayan dillerde İngilizce tablodan gösterilir.
+ * Tabloda olmayan metin İngilizceye, o da yoksa Türkçeye düşer (çökme yok). Yer tutucular: {0}, {1}, …
  */
 
 /** Telefon diline göre metin. Örn. tx("Silindi: {0}", ad) */
 fun tx(source: String, vararg args: Any?): String {
-    var out = if (Locale.getDefault().language == "tr") source else (I18n.EN[source] ?: source)
+    val lang = Locale.getDefault().language
+    var out = if (lang == "tr") source else (I18n.table(lang)[source] ?: I18n.EN[source] ?: source)
     args.forEachIndexed { i, a -> out = out.replace("{" + i + "}", a.toString()) }
     return out
 }
 
 internal object I18n {
+    /** Tablosu olan diller (Türkçe kaynak dildir, İngilizce [EN]). */
+    val LANGS = listOf("de", "fr", "es", "it", "pt", "ru", "ar", "hi", "id")
+
+    fun table(lang: String): Map<String, String> = when (lang) {
+        "de" -> I18nTables.DE
+        "fr" -> I18nTables.FR
+        "es" -> I18nTables.ES
+        "it" -> I18nTables.IT
+        "pt" -> I18nTables.PT
+        "ru" -> I18nTables.RU
+        "ar" -> I18nTables.AR
+        "hi" -> I18nTables.HI
+        "id", "in" -> I18nTables.ID // Endonezce: eski Java kodu "in"
+        else -> EN
+    }
+
     val EN: Map<String, String> = mapOf(
         "Ses hazırlanıyor…" to
             "Preparing audio…",

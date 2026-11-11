@@ -74,8 +74,8 @@ import com.aitolian.sesyazibench.engine.TRANSLATABLE
 import kotlinx.coroutines.launch
 
 // Yayın öncesi bu uygulamaya özel adreslerle güncellenmeli
-// Yalnız MuteRead'e ait politika (store/muteread-privacy.html; GitHub Pages'te yayınlanır)
-private const val PRIVACY_URL = "https://mrzekai.github.io/muteread-privacy.html"
+// Yalnız SnapScribe'e ait politika (store/snapscribe-privacy.html; GitHub Pages'te yayınlanır)
+private const val PRIVACY_URL = "https://mrzekai.github.io/snapscribe-privacy.html"
 private const val SUPPORT_EMAIL = "aitolianrock@gmail.com"
 
 private val LICENSES: String get() =

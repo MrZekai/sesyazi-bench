@@ -1,33 +1,33 @@
-# MuteRead — Google Play mağaza metinleri
+# SnapScribe — Google Play mağaza metinleri
 
-Uygulama adı (telefonda): **MuteRead** · Paket: `com.aitolian.muteread` (Play'de kayıtlı, değişmez).
+Uygulama adı (telefonda): **SnapScribe** · Paket: `com.aitolian.snapscribe` (Play'e ilk yüklemeden sonra değiştirilemez).
 Sınırlar: başlık ≤ 30, kısa açıklama ≤ 80 karakter (boşluk dahil; aşağıdaki sayılar kontrol edildi).
 Başlıkta ve kısa açıklamada "WhatsApp" YOK (marka/taklit riski); yalnız uzun açıklamada, tanımlayıcı olarak.
 Hız vaadi (v1.22): kısa açıklama + ilk cümle + 1. ekran görüntüsü + uygulama içi "⚡ X sn'de yazıya döküldü". "En hızlı / #1 / Best" gibi karşılaştırmalı iddia YOK.
 
 | Dil | Başlık | Kr. | Kısa açıklama | Kr. |
 |---|---|---|---|---|
-| en-US (varsayılan) | MuteRead Voice Message to Text | 30 | Transcribe voice notes & audio to text in seconds. Read when you can't listen. | 78 |
-| tr-TR | MuteRead: Sesli Mesajı Oku | 26 | Ses kaydını ve sesli notu saniyeler içinde yazıya çevir. Dinleyemiyorsan oku. | 77 |
-| de-DE | MuteRead: Sprachnachrichten | 27 | Sprachnachrichten, Audio & Video in Text umwandeln. Lesen statt anhören. | 72 |
-| fr-FR | MuteRead: Vocal en texte | 24 | Transcrivez messages vocaux, audio et vidéo en texte. Lisez sans écouter. | 73 |
-| es-ES / es-419 | MuteRead: Audios a texto | 24 | Transcribe audios de voz y videos a texto. Léelos cuando no puedas escuchar. | 76 |
-| it-IT | MuteRead: Vocali in testo | 25 | Trascrivi messaggi vocali, audio e video in testo. Leggi senza ascoltare. | 73 |
-| pt-BR | MuteRead: Áudio para texto | 26 | Transcreva áudios de voz e vídeos em texto. Leia quando não puder ouvir. | 72 |
-| ru-RU | MuteRead: Голосовые в текст | 27 | Голосовые сообщения, аудио и видео в текст. Читайте, когда нельзя слушать. | 74 |
-| ar | MuteRead: رسائل صوتية إلى نص | 28 | حوّل الرسائل الصوتية والصوت والفيديو إلى نص. اقرأ عندما لا تستطيع الاستماع. | 75 |
-| hi-IN | MuteRead: आवाज़ से टेक्स्ट | 26 | वॉइस मैसेज, ऑडियो और वीडियो को टेक्स्ट में बदलें। जब सुन न सकें, पढ़ें। | 71 |
-| id | MuteRead: Pesan Suara ke Teks | 29 | Ubah pesan suara, audio & video jadi teks. Baca saat tidak bisa mendengar. | 74 |
+| en-US (varsayılan) | SnapScribe Voice Note to Text | 29 | Transcribe voice messages & audio in seconds. Read them when you can't listen. | 78 |
+| tr-TR | SnapScribe: Sesli Mesajı Oku | 28 | Ses kaydını ve sesli notu saniyeler içinde yazıya çevir. Dinleyemiyorsan oku. | 77 |
+| de-DE | SnapScribe: Sprachnachrichten | 29 | Sprachnachrichten, Audio & Video in Text umwandeln. Lesen statt anhören. | 72 |
+| fr-FR | SnapScribe: Vocal en texte | 26 | Transcrivez messages vocaux, audio et vidéo en texte. Lisez sans écouter. | 73 |
+| es-ES / es-419 | SnapScribe: Audios a texto | 26 | Transcribe audios de voz y videos a texto. Léelos cuando no puedas escuchar. | 76 |
+| it-IT | SnapScribe: Vocali in testo | 27 | Trascrivi messaggi vocali, audio e video in testo. Leggi senza ascoltare. | 73 |
+| pt-BR | SnapScribe: Áudio para texto | 28 | Transcreva áudios de voz e vídeos em texto. Leia quando não puder ouvir. | 72 |
+| ru-RU | SnapScribe: Голосовые в текст | 29 | Голосовые сообщения, аудио и видео в текст. Читайте, когда нельзя слушать. | 74 |
+| ar | SnapScribe: رسائل صوتية إلى نص | 30 | حوّل الرسائل الصوتية والصوت والفيديو إلى نص. اقرأ عندما لا تستطيع الاستماع. | 75 |
+| hi-IN | SnapScribe: आवाज़ से टेक्स्ट | 28 | वॉइस मैसेज, ऑडियो और वीडियो को टेक्स्ट में बदलें। जब सुन न सकें, पढ़ें। | 71 |
+| id | SnapScribe Pesan Suara ke Teks | 30 | Ubah pesan suara, audio & video jadi teks. Baca saat tidak bisa mendengar. | 74 |
 
 Not: Yerel terimler bilinçli seçildi — İspanyolca/Portekizce'de sesli mesaja "audio/áudio", Fransızca'da "vocal", İtalyanca'da "vocale", Rusça'da "голосовые" deniyor.
 
 ## Uzun açıklama (en-US)
 
-MuteRead turns voice messages into text in seconds, so you can read them in a meeting, on the bus, or late at night without playing a sound. Share a voice note, get the transcription, and reply while others are still listening.
+SnapScribe turns voice messages into text in seconds, so you can read them in a meeting, on the bus, or late at night without playing a sound. Share a voice note, get the transcription, and reply while others are still listening.
 
 How it works
 1. In your chat app, long-press a voice message and tap Share.
-2. Choose MuteRead.
+2. Choose SnapScribe.
 3. Read the text. Copy it, share it, or translate it.
 
 Works with voice messages shared from WhatsApp, Telegram and other chat apps, plus audio recordings and videos stored on your phone.
@@ -54,17 +54,17 @@ When it helps
 Privacy, in plain words
 An internet connection is required. Audio is sent to Meta's Wit.ai service to be transcribed. We don't run our own server; your notes stay on your phone. Translation runs on your phone. No account, no sign-in. The app shows ads.
 
-Share your next voice message to MuteRead and read it instead.
+Share your next voice message to SnapScribe and read it instead.
 
-MuteRead is not affiliated with, endorsed or sponsored by WhatsApp or Meta. WhatsApp is a trademark of WhatsApp LLC.
+SnapScribe is not affiliated with, endorsed or sponsored by WhatsApp or Meta. WhatsApp is a trademark of WhatsApp LLC.
 
 ## Uzun açıklama (tr-TR)
 
-MuteRead sesli mesajları saniyeler içinde yazıya çevirir; toplantıda, otobüste ya da gece sesi açmadan okursun. Sesli mesajı paylaş, metni oku, başkaları hâlâ dinlerken cevabını yaz.
+SnapScribe sesli mesajları saniyeler içinde yazıya çevirir; toplantıda, otobüste ya da gece sesi açmadan okursun. Sesli mesajı paylaş, metni oku, başkaları hâlâ dinlerken cevabını yaz.
 
 Nasıl kullanılır
 1. Sohbet uygulamanda sesli mesaja uzun bas ve Paylaş'a dokun.
-2. MuteRead'i seç.
+2. SnapScribe'i seç.
 3. Metni oku; kopyala, paylaş ya da çevir.
 
 WhatsApp, Telegram ve diğer sohbet uygulamalarından paylaşılan sesli mesajlarla, telefondaki ses kayıtları ve videolarla çalışır.
@@ -91,18 +91,18 @@ Ne zaman işe yarar
 Gizlilik, açıkça
 İnternet bağlantısı gerekir. Ses, yazıya dökülmek için Meta'nın Wit.ai hizmetine gönderilir. Kendi sunucumuz yok; notların telefonunda kalır. Çeviri telefonunda yapılır. Hesap ya da giriş yok. Uygulama reklam gösterir.
 
-Bir sonraki sesli mesajı MuteRead'e paylaş, dinlemek yerine oku.
+Bir sonraki sesli mesajı SnapScribe'e paylaş, dinlemek yerine oku.
 
-MuteRead, WhatsApp veya Meta ile bağlantılı değildir; onlar tarafından desteklenmemiş veya onaylanmamıştır. WhatsApp, WhatsApp LLC'nin ticari markasıdır.
+SnapScribe, WhatsApp veya Meta ile bağlantılı değildir; onlar tarafından desteklenmemiş veya onaylanmamıştır. WhatsApp, WhatsApp LLC'nin ticari markasıdır.
 
 ## ASO notları (marketing-skills:aso denetimi, Kasım 2026)
 
 - Kısa açıklama başlığı tekrar etmez, tamamlar: en-US "transcribe / voice notes / audio to text", tr-TR "ses kaydı / sesli not / yazıya çevir".
 - Uzun açıklama Google Play'de aranır: ana ifadeler ilk üç cümlede ve bölüm başlıklarında, doğal yoğunlukta. Anahtar kelime yığma yok.
-- Uygulama arayüzü v1.24 ile Türkçe + İngilizce (telefon dili Türkçe değilse İngilizce). Şimdilik yalnız en-US ve tr-TR mağaza sayfaları yayınlanmalı.
-- Diğer 9 dilde uzun açıklama ve arayüz çevirisi YOK. Play Console her dil için uzun açıklama ister; bu diller arayüz çevirisiyle birlikte yayınlanmalı (aksi halde mağaza vaadi ile uygulama uyuşmaz, düşük puan gelir).
+- Uygulama arayüzü v1.26 ile 11 dilde (tr, en, de, fr, es, it, pt, ru, ar, hi, id); Arapça sağdan sola.
+- Diğer 9 dilde UZUN AÇIKLAMA henüz yok. Play Console her dil için uzun açıklama ister; yazılana kadar yalnız en-US ve tr-TR sayfaları yayınlanmalı.
 - de/fr/es/it/pt/ru/ar/hi/id kısa açıklamalarında hız vaadi ("saniyeler içinde") yok; en/tr ile hizalanacak.
-- Başlıkta boş kalan karakterler: tr 4, fr 6, es 6, it 5, pt 4, hi 4. Anadili kontrolüyle doldurulabilir.
+- Başlıkta boş kalan karakterler: fr 4, es 4, it 3. Anadili kontrolüyle doldurulabilir.
 - Sürüm notu (en-US, 110 kr.): First release: share a voice message, read it as text in seconds. Notes, translation and .srt export included.
 - Sürüm notu (tr-TR): İlk sürüm: sesli mesajı paylaş, saniyeler içinde yazı olarak oku. Notlar, çeviri ve .srt dışa aktarma dahil.
 - Arama hacmi ve sıralama ücretli araç olmadan ölçülemez; yayından sonra Store Listing Experiments ile kısa açıklama ve ilk 3 ekran görüntüsü denenmeli (aynı anda tek deney, en az 7 gün).

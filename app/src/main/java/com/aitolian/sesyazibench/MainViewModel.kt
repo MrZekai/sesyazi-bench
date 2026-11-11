@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /*
- * MuteRead v1.22 — YALNIZ Wit.ai (internet). Cihaz içi Whisper modelleri, yerel yedek,
+ * SnapScribe v1.22 — YALNIZ Wit.ai (internet). Cihaz içi Whisper modelleri, yerel yedek,
  * "En iyi ile iyileştir", model indirme ve otomatik dil algılama (yerel model) KALDIRILDI.
  * Vaat: hız. Hata olursa sessizce yavaş bir motora geçilmez; açık mesaj + "Tekrar dene".
  * Çeviri (ML Kit, cihazda) olduğu gibi kalır.
