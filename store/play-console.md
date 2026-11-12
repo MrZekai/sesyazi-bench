@@ -16,6 +16,7 @@ Paket: `com.aitolian.snapscribe` · Gizlilik politikası: https://mrzekai.github
 | Hükümet uygulaması | Hayır |
 | Reklam kimliği (Advertising ID) | **Evet** kullanıyor (AdMob SDK `AD_ID` iznini ekler) → amaç: Reklamcılık veya pazarlama, Analiz |
 | Kategori | Verimlilik (Productivity); etiketler: sesi yazıya çevirme / transkripsiyon. Alternatif: Araçlar. Yayından sonra sıralamaya göre gözden geçir |
+| Geliştirici adı | BANGI (mağaza sayfasında görünür) |
 | İletişim bilgileri | E-posta: aitolianrock@gmail.com (mağaza sayfasında görünür) |
 
 ## 2. Data safety (taslak — gerçek davranışa göre; son kararı sen ver)
